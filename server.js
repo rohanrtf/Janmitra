@@ -1,1 +1,13 @@
-const express=require("express");const cors=require("cors");const app=express();app.use(cors({origin:["https://janmitra-eight.vercel.app","http://localhost:5173"]}));app.use(express.json({limit:"50mb"}));app.post("/api/claude",async(req,res)=>{try{const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":process.env.ANTHROPIC_API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify(req.body)});const d=await r.json();res.json(d);}catch(e){res.status(500).json({error:e.message});}});app.listen(process.env.PORT||3001,()=>console.log("Server ready"));
+const express = require('express');
+const cors = require('cors');
+const app = express();
+app.use(cors());
+app.use(express.json({limit:'50mb'}));
+app.post('/api/claude',async(req,res)=>{
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify(req.body)});
+    const d=await r.json();
+    res.json(d);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+app.listen(process.env.PORT||3001,()=>console.log('Server ready'));
