@@ -1,0 +1,1 @@
+node -e "const fs=require('fs');let s=fs.readFileSync('src/janmitra-platform.jsx','utf8');s=s.replace(/https:\/\/api\.anthropic\.com\/v1\/messages/g,'http://localhost:3001/api/claude');fs.writeFileSync('src/janmitra-platform.jsx',s);console.log('done',s.match(/localhost:3001/g)?.length,'replacements');"
