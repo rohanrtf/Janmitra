@@ -1786,7 +1786,7 @@ function BackButton({ onClick, label = "Back" }) {
 // ─── SCREEN 1: VERIFY ─────────────────────────────────────────────────────────
 // ─── AI DOCUMENT SCANNER UTILITIES ───────────────────────────────────────────
 async function callClaudeVision(imageBase64, mediaType, prompt) {
-  const response = await fetch("http://localhost:3001/api/claude", {
+  const response = await fetch("https://janmitra-production.up.railway.app/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
