@@ -4362,7 +4362,7 @@ function VerifyScreen({ onVerified }) {
             <input value={workerId} onChange={e => setWorkerId(e.target.value)} placeholder="Leave blank if unknown" style={inputStyle} />
           </div>
 
-          <Button onClick={() => setStep("otp_sent")} variant="secondary" size="lg" disabled={!canSendOtp}>
+          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
             📲 Send OTP to {phone || "mobile"}
           </Button>
 
@@ -4403,7 +4403,7 @@ function VerifyScreen({ onVerified }) {
           <div style={{ background: "#EFF8F3", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.green }}>
             🔒 Aadhaar number is used only for identity consent — not stored in our system.
           </div>
-          <Button onClick={() => onVerified({ phone, workerId, aadhaarNumber, aadhaarLast4, aadhaarVerified: true, verifyMode: "otp" })}
+          <Button onClick={() => { if(otp === window._jansetuOtp){ onVerified({ phone, workerId, aadhaarNumber, aadhaarLast4, aadhaarVerified: true, verifyMode: "otp" }); } else { alert("Incorrect OTP. Please try again."); } }}
             variant="primary" size="lg" disabled={otp.length < 4}>
             ✅ Verify & Continue
           </Button>
