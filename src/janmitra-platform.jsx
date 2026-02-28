@@ -6080,7 +6080,7 @@ function AdminDashboard({ applications }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function Jan SetuApp() {
+export default function JanSetuApp() {
   const [screen, setScreen] = useState("verify");
   const [intent, setIntent] = useState(null); // "schemes" | "documents"
   const [verifiedWorker, setVerifiedWorker] = useState(null);
