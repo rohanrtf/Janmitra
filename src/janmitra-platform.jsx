@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { saveWorker } from "./supabase.js";
 
 // ─── THEME & CONSTANTS ────────────────────────────────────────────────────────
 const COLORS = {
@@ -6107,6 +6108,7 @@ export default function JanmitraApp() {
   const handleVerified = (data) => {
     setVerifiedWorker({ ...data, phone: data.phone });
     setScreen("intent");
+    saveWorker({ id: data.id || crypto.randomUUID(), mobile: data.phone, aadhaarLast4: data.aadhaar?.slice(-4), name: data.name }).catch(console.error);
   };
 
   const handleHousehold = (hh) => {
