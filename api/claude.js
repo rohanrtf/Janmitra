@@ -4,6 +4,8 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+  const key = process.env.ANTHROPIC_API_KEY || 'MISSING';
+  console.log('Key starts with:', key.substring(0, 10));
   const body = JSON.stringify(req.body);
   const options = {
     hostname: 'api.anthropic.com',
@@ -12,7 +14,7 @@ module.exports = async (req, res) => {
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body),
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'x-api-key': key,
       'anthropic-version': '2023-06-01'
     }
   };
