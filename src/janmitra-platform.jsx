@@ -264,9 +264,9 @@ const STATUS_COLORS = {
 // ─── MESSAGE TEMPLATES ────────────────────────────────────────────────────────
 const MSG = {
   created: {
-    en: (ref, scheme) => `Janmitra Ref ${ref} created for ${scheme}. Status: In process. We will update you at each step.`,
-    hi: (ref, scheme) => `Janmitra Ref ${ref} (${scheme}) बन गया है। स्थिति: प्रक्रिया में। हर स्टेप पर अपडेट मिलेगा।`,
-    bn: (ref, scheme) => `Janmitra Ref ${ref} (${scheme}) তৈরি হয়েছে। স্ট্যাটাস: প্রক্রিয়াধীন। প্রতিটি ধাপে আপডেট দেব।`,
+    en: (ref, scheme) => `Jan Setu Ref ${ref} created for ${scheme}. Status: In process. We will update you at each step.`,
+    hi: (ref, scheme) => `Jan Setu Ref ${ref} (${scheme}) बन गया है। स्थिति: प्रक्रिया में। हर स्टेप पर अपडेट मिलेगा।`,
+    bn: (ref, scheme) => `Jan Setu Ref ${ref} (${scheme}) তৈরি হয়েছে। স্ট্যাটাস: প্রক্রিয়াধীন। প্রতিটি ধাপে আপডেট দেব।`,
   },
   submitted: {
     en: (ref, ack) => `Ref ${ref} has been submitted. Acknowledgement: ${ack}.`,
@@ -830,7 +830,7 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
           <p>&nbsp;</p><p>&nbsp;</p>
           <p><strong>________________________</strong></p>
           <p><strong>${welfareOfficer}</strong></p>
-          <p>Welfare Officer / Janmitra Pratinidhi</p>
+          <p>Welfare Officer / Jan Setu Pratinidhi</p>
           <p>MB Sponge & Power Limited, Jamuria</p>
           <p>Date: ${today}</p>
         </div>
@@ -913,7 +913,7 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
       title: "Aadhaar Seva Kendra — Visit Docket",
       content: `
         <div class="docket">
-          <div class="docket-header">JANMITRA — AADHAAR SEVA KENDRA VISIT DOCKET</div>
+          <div class="docket-header">JAN SETU — AADHAAR SEVA KENDRA VISIT DOCKET</div>
           <div class="docket-ref">Ref: ${Math.random().toString(36).substr(2,8).toUpperCase()} · Generated: ${today}</div>
           <table class="docket-table">
             <tr><th colspan="2">Person Details</th></tr>
@@ -964,7 +964,7 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
       title: "Jan Dhan Account — Bank Visit Docket",
       content: `
         <div class="docket">
-          <div class="docket-header">JANMITRA — JAN DHAN ACCOUNT OPENING DOCKET</div>
+          <div class="docket-header">JAN SETU — JAN DHAN ACCOUNT OPENING DOCKET</div>
           <div class="docket-ref">Ref: JD-${Math.floor(Math.random()*9000)+1000} · Generated: ${today}</div>
           <table class="docket-table">
             <tr><th colspan="2">Applicant Details</th></tr>
@@ -1091,7 +1091,7 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
       title: "BDO Office — Caste Certificate Visit Docket",
       content: `
         <div class="docket">
-          <div class="docket-header">JANMITRA — BDO VISIT DOCKET (CASTE CERTIFICATE)</div>
+          <div class="docket-header">JAN SETU — BDO VISIT DOCKET (CASTE CERTIFICATE)</div>
           <div class="docket-ref">Ref: BDO-${Math.floor(Math.random()*9000)+1000} · Generated: ${today}</div>
           <table class="docket-table">
             <tr><th colspan="2">Applicant Details</th></tr>
@@ -1152,7 +1152,7 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
       title: "Kanyashree — Girl's Bank Account Opening Docket",
       content: `
         <div class="docket">
-          <div class="docket-header">JANMITRA — KANYASHREE BANK ACCOUNT DOCKET</div>
+          <div class="docket-header">JAN SETU — KANYASHREE BANK ACCOUNT DOCKET</div>
           <div class="docket-ref">Ref: KY-${Math.floor(Math.random()*9000)+1000} · Generated: ${today}</div>
           <table class="docket-table">
             <tr><th colspan="2">Girl Student Details</th></tr>
@@ -1319,11 +1319,11 @@ function openPrintWindow(title, content) {
 function _openDoc(html) {
   // Use a hidden iframe injected into the current page — works in all sandbox environments
   // Remove any existing print frame
-  const existing = document.getElementById("_janmitra_print_frame");
+  const existing = document.getElementById("_jan-setu_print_frame");
   if (existing) existing.remove();
 
   const iframe = document.createElement("iframe");
-  iframe.id = "_janmitra_print_frame";
+  iframe.id = "_jan-setu_print_frame";
   iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:#fff";
   document.body.appendChild(iframe);
 
@@ -1335,7 +1335,7 @@ function _openDoc(html) {
 
   // Add a close button to the iframe content
   const closeBtn = iframe.contentDocument.createElement("div");
-  closeBtn.innerHTML = '<button onclick="parent.document.getElementById(\'_janmitra_print_frame\').remove()" style="position:fixed;top:12px;left:12px;background:#E8690B;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;z-index:100000">✕ Close</button>';
+  closeBtn.innerHTML = '<button onclick="parent.document.getElementById(\'_jan-setu_print_frame\').remove()" style="position:fixed;top:12px;left:12px;background:#E8690B;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;z-index:100000">✕ Close</button>';
   iframe.contentDocument.body.appendChild(closeBtn);
 }
 
@@ -3555,13 +3555,13 @@ function DocDetailScreen({ docCfg, worker, onBack, docVault = {}, addToVault = (
       refGuide: "📌 अतिरिक्त संदर्भ गाइड",
     },
     en: {
-      title: "Janmitra — Document Application Packet",
+      title: "Jan Setu — Document Application Packet",
       org: "MB Sponge & Power Limited, Jamuria",
       prefilledDetails: "📋 Pre-Filled Application Details",
       whereToSubmit: "🏛️ Where to Submit",
       docsToBring: "✅ Documents to Carry (Check Before Leaving)",
       stepsAtOffice: "📖 Steps at the Office",
-      agentSign: "Agent / Janmitra Pratinidhi",
+      agentSign: "Agent / Jan Setu Pratinidhi",
       workerSign: "Worker / Applicant Signature",
       printBtn: "🖨️ Print / Save PDF",
       close: "✕ Close",
@@ -3770,7 +3770,7 @@ function DocDetailScreen({ docCfg, worker, onBack, docVault = {}, addToVault = (
       <div class="hdr-meta">
         <div>
           <div class="hdr-main">${docCfg.icon} ${docTitle}</div>
-          <div class="hdr-sub">JANMITRA — ${L.org}</div>
+          <div class="hdr-sub">JAN SETU — ${L.org}</div>
           <div class="lang-badge">${langLabel}</div>
         </div>
         <div class="hdr-date">${L.date}: ${today}</div>
@@ -4110,7 +4110,7 @@ function DocDetailScreen({ docCfg, worker, onBack, docVault = {}, addToVault = (
                   <div class="no-print" style="text-align:right;margin-bottom:10px"><button onclick="window.print()" style="background:#E8690B;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer">🖨️ Print</button></div>
                   <div class="hdr">
                     <div style="font-size:17px;font-weight:900">${docCfg.icon} ${docCfg.title} — Application Docket</div>
-                    <div style="font-size:11px;opacity:.75;margin-top:4px">JANMITRA · MB Sponge & Power · Generated: ${new Date().toLocaleDateString("en-IN")}</div>
+                    <div style="font-size:11px;opacity:.75;margin-top:4px">JAN SETU · MB Sponge & Power · Generated: ${new Date().toLocaleDateString("en-IN")}</div>
                   </div>
                   <div class="section"><div class="sec-title">📋 Applicant Details (copy these into the online form)</div><table>${formRows}</table></div>
                   <div class="section"><div class="sec-title">🌐 Portal Link</div><div style="padding:14px"><a href="${docCfg.onlineUrl}" target="_blank" class="portal-link">→ Open ${docCfg.onlineLabel || "Portal"}</a></div></div>
@@ -4296,7 +4296,7 @@ function VerifyScreen({ onVerified }) {
   };
 
   const L = {
-    en: { title: "Worker Verification", sub: "MB Sponge & Power Limited — Janmitra Portal" },
+    en: { title: "Worker Verification", sub: "MB Sponge & Power Limited — Jan Setu Portal" },
     hi: { title: "कर्मचारी सत्यापन", sub: "MB Sponge & Power Limited — जनमित्र पोर्टल" },
     bn: { title: "কর্মী যাচাইকরণ", sub: "MB Sponge & Power Limited — জনমিত্র পোর্টাল" },
   }[lang];
@@ -5399,14 +5399,14 @@ function generateSubmissionDocket(app, formData, appSettings) {
     @media print{body{margin:0}button{display:none}}
   </style></head><body>
   <div style="text-align:right;margin-bottom:12px"><button onclick="window.print()" style="background:#E8690B;color:#fff;border:none;padding:8px 18px;border-radius:7px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Print / Save PDF</button></div>
-  <div class="hdr"><div><div class="hdr-title">${app.scheme.icon} ${app.scheme.fullName}</div><div style="font-size:11px;opacity:.7;margin-top:2px">Submission Docket — JANMITRA, MB Sponge & Power Limited</div></div><div class="hdr-ref">${app.ref}</div></div>
+  <div class="hdr"><div><div class="hdr-title">${app.scheme.icon} ${app.scheme.fullName}</div><div style="font-size:11px;opacity:.7;margin-top:2px">Submission Docket — JAN SETU, MB Sponge & Power Limited</div></div><div class="hdr-ref">${app.ref}</div></div>
   <div class="meta"><span>👤 ${app.person.name} (${app.person.relation})</span><span>📅 ${today}</span><span>${cfg.modeIcon} ${cfg.modeLabel}</span></div>
   <div class="tip">💡 Agent Tip: ${cfg.tip}</div>
   <div class="section"><div class="sec-title">📋 Pre-filled Application Details</div><table>${rows}</table></div>
   <div class="section"><div class="sec-title">📖 Submission Steps</div><div class="steps">${cfg.instructions.map((s,i)=>`<div class="step"><div class="sn">${i+1}</div><span>${s}</span></div>`).join("")}</div></div>
   ${campChecklist}
   <div class="section"><div class="sec-title">📎 Documents to Carry</div><div class="steps">${app.scheme.docs.map(d=>`<label class="chk"><input type="checkbox"> ${d}</label>`).join("")}</div></div>
-  <div class="sig"><div class="sig-box"><div style="margin-bottom:40px"></div><div class="sig-line">${welfareOfficer}</div><div style="font-size:11px;color:#7A8A9A">Welfare Officer / Janmitra Pratinidhi<br>MB Sponge & Power Limited</div></div><div class="sig-box"><div style="margin-bottom:40px"></div><div class="sig-line">${app.person.name}</div><div style="font-size:11px;color:#7A8A9A">Beneficiary / Applicant Signature</div></div></div>
+  <div class="sig"><div class="sig-box"><div style="margin-bottom:40px"></div><div class="sig-line">${welfareOfficer}</div><div style="font-size:11px;color:#7A8A9A">Welfare Officer / Jan Setu Pratinidhi<br>MB Sponge & Power Limited</div></div><div class="sig-box"><div style="margin-bottom:40px"></div><div class="sig-line">${app.person.name}</div><div style="font-size:11px;color:#7A8A9A">Beneficiary / Applicant Signature</div></div></div>
   </body></html>`;
 
   _openDoc(html);
@@ -5509,7 +5509,7 @@ function SubmissionConsole({ app, onBack, onSubmitted }) {
             🌐 {cfg.portalLabel || "Open Portal ↗"}
           </button>
         )}
-        <button onClick={() => generateSubmissionDocket(app, formData, { welfareOfficer:"Welfare Officer / Janmitra Pratinidhi" })} style={{ background:COLORS.amberLight, color:COLORS.saffron, border:`1.5px solid ${COLORS.saffron}`, borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+        <button onClick={() => generateSubmissionDocket(app, formData, { welfareOfficer:"Welfare Officer / Jan Setu Pratinidhi" })} style={{ background:COLORS.amberLight, color:COLORS.saffron, border:`1.5px solid ${COLORS.saffron}`, borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
           🖨️ Print Docket / PDF
         </button>
       </div>
@@ -6014,7 +6014,7 @@ function DocumentsHub({ household, onBack, showBackButton }) {
                   if (f.src === "person.aadhaarLast4") fill[f.key] = worker.aadhaarLast4 || "";
                   if (f.src === "person.caste")        fill[f.key] = fakeApp.person.caste;
                 });
-                generateSubmissionDocket(fakeApp, fill, { welfareOfficer: "Welfare Officer / Janmitra Pratinidhi" });
+                generateSubmissionDocket(fakeApp, fill, { welfareOfficer: "Welfare Officer / Jan Setu Pratinidhi" });
               }} style={{ background: "#FAFBFD", border: "1.5px solid #E0E8F0", borderRadius: 8, padding: "9px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: COLORS.navyMid, textAlign: "left", display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 18 }}>{scheme.icon}</span>
                 <span style={{ flex: 1 }}>{scheme.name}</span>
@@ -6045,7 +6045,7 @@ function AdminDashboard({ applications }) {
   return (
     <div>
       <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📊 Admin Dashboard</h2>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>MB Sponge & Power — Janmitra Pilot Overview</p>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>MB Sponge & Power — Jan Setu Pilot Overview</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
@@ -6080,7 +6080,7 @@ function AdminDashboard({ applications }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function JanmitraApp() {
+export default function Jan SetuApp() {
   const [screen, setScreen] = useState("verify");
   const [intent, setIntent] = useState(null); // "schemes" | "documents"
   const [verifiedWorker, setVerifiedWorker] = useState(null);
@@ -6153,7 +6153,7 @@ export default function JanmitraApp() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: COLORS.saffron, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🌟</div>
             <div>
-              <div style={{ fontWeight: 900, color: "#fff", fontSize: 16, letterSpacing: 0.5 }}>JANMITRA</div>
+              <div style={{ fontWeight: 900, color: "#fff", fontSize: 16, letterSpacing: 0.5 }}>JAN SETU</div>
               <div style={{ fontSize: 10, color: COLORS.saffronLight, letterSpacing: 1 }}>MB SPONGE & POWER · JAMURIA</div>
             </div>
           </div>
@@ -6240,7 +6240,7 @@ export default function JanmitraApp() {
                 <DocHealthScreen
                   household={household}
                   questionnaire={household}
-                  appSettings={{ welfareOfficer: "Welfare Officer / Janmitra Pratinidhi" }}
+                  appSettings={{ welfareOfficer: "Welfare Officer / Jan Setu Pratinidhi" }}
                   onProceed={handleDocHealthProceed}
                   onBack={() => setScreen("questionnaire")}
                 />
@@ -6293,7 +6293,7 @@ export default function JanmitraApp() {
 
         {/* FOOTER */}
         <div style={{ textAlign: "center", marginTop: 20, color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
-          Powered by Janmitra · Jaagruk Bharat · v1.0 MVP
+          Powered by Jan Setu · Jaagruk Bharat · v1.0 MVP
         </div>
       </div>
     </div>
