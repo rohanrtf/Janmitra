@@ -4296,17 +4296,7 @@ function VerifyScreen({ onVerified }) {
     const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
     return () => clearTimeout(t);
   }, [resendTimer]);
-  const [lang, setLang] = useState("en");
-  const [resendTimer, setResendTimer] = useState(0);
-  const [resending, setResending] = useState(false);
-
-  // Countdown timer for resend OTP
-  useEffect(() => {
-    if (resendTimer <= 0) return;
-    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendTimer]);
-  const [lang, setLang] = useState("en");
+  
 
   // Extract last 4 whenever full number typed
   const handleAadhaarChange = (val) => {
