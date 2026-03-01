@@ -4580,7 +4580,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   });
 
   // ── Docs scanned for worker ──────────────────────────────────────────────────
-  const [scannedDocs, setScannedDocs] = useState({});
+  const [scannedDocs, setScannedDocs] = useState(existingHousehold?.scannedDocs || {});
   const [mismatches, setMismatches] = useState(null); // null = not checked yet
 
   // ── Family members ───────────────────────────────────────────────────────────
@@ -4950,6 +4950,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
             scannedDocMismatches: mismatches || [],
           },
           members,
+          scannedDocs,
         })} variant="primary" size="lg" disabled={!workerData.name || !workerData.age}>
           Continue to Doc Health Check →
         </Button>
@@ -4963,32 +4964,52 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
 
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
 function QuestionnaireScreen({ household, onComplete, onBack }) {
-  const [monthlyIncome, setMonthlyIncome] = useState("");
+  const [monthlyIncome, setMonthlyIncome] = useState(household?.worker?.annualIncome ? String(Math.round(parseInt(household.worker.annualIncome) / 12)) : "");
   const [annualIncome, setAnnualIncome] = useState(household?.worker?.annualIncome || "");
   const [rationCard, setRationCard] = useState("");
+  const [caste] = useState(household?.worker?.caste || "");
+  const [disability] = useState(household?.worker?.disability || 0);
   const [district] = useState("Paschim Bardhaman");
+
+  const handleMonthlyChange = (v) => {
+    setMonthlyIncome(v);
+    if (v) setAnnualIncome(String(parseInt(v) * 12 || 0));
+    else setAnnualIncome("");
+  };
+  const handleAnnualChange = (v) => {
+    setAnnualIncome(v);
+    if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0));
+    else setMonthlyIncome("");
+  };
 
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Household" />}
       <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📋 Household Details</h2>
       <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>A few more details to find all eligible schemes</p>
-
       <Card style={{ background: "#EFF8F3", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>📍 Location (Pre-filled)</div>
+        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 7 }}>📍 Location (Pre-filled)</div>
         <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal · {district}</div>
       </Card>
 
-      <Input label="Household Monthly Income (₹)" value={monthlyIncome} onChange={setMonthlyIncome} type="number" placeholder="e.g. 8000" required />
-      <Input label="Household Annual Income (₹)" value={annualIncome} onChange={setAnnualIncome} type="number" placeholder="e.g. 96000" required />
+      {(caste || disability > 0) && (
+        <Card style={{ background: "#F0FAF4", marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: COLORS.green, fontWeight: 700 }}>
+            ✅ From Hold: {caste ? `Caste — ${caste}` : ""}{caste && disability > 0 ? " · " : ""}{disability > 0 ? `Disability — ${disability}%` : ""}
+          </div>
+        </Card>
+      )}
+
+      <Input label="Household Monthly Income (₹)" value={monthlyIncome} onChange={handleMonthlyChange} type="number" placeholder="e.g. 8000" required />
+      <Input label="Household Annual Income (₹)" value={annualIncome} onChange={handleAnnualChange} type="number" placeholder="e.g. 96000" required />
       <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes – PHH","Yes – AAY","Yes – SPHH","No"]} required />
 
       <div style={{ background: COLORS.amberLight, border: `1px solid ${COLORS.gold}40`, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13, color: COLORS.amber }}>
-        ℹ️ Worker & family details from the previous step will be used for eligibility. Additional scheme-specific questions will be asked during application.
+        ℹ️ Worker & family details from thl be used for eligibility.
       </div>
 
       <Button
-        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard })}
+        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability })}
         variant="primary" size="lg"
         disabled={!monthlyIncome || !annualIncome || !rationCard}
       >
