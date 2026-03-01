@@ -1999,15 +1999,6 @@ function crossCompareDocuments(scannedDocs) {
       });
     }
   }
-  if (aadhaar?.addressState && aadhaar.addressState !== "West Bengal") {
-    mismatches.push({
-      type: "address_state", severity: "critical",
-      title: `Aadhaar address: ${aadhaar.addressState} — not West Bengal`,
-      detail: `Aadhaar shows ${aadhaar.addressState} address. All WB schemes require WB address.`,
-      docA: "Aadhaar", valA: aadhaar.address,
-      fix: "AADHAAR_ADDR_OUTSTATE",
-    });
-  }
   if (caste?.issueDate) {
     const parts = (caste.issueDate || "").split("/");
     if (parts.length === 3) {
@@ -4571,7 +4562,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   // ── Worker data — AI-filled + manual ────────────────────────────────────────
   const [workerData, setWorkerData] = useState({
     name: existingHousehold?.worker?.name || "", age: existingHousehold?.worker?.age || "", gender: existingHousehold?.worker?.gender || "male", caste: existingHousehold?.worker?.caste || "", maritalStatus: existingHousehold?.worker?.maritalStatus || "married",
-    disability: 0, unorganised: true, epfoCovered: false, farmer: false,
+    disability: existingHousehold?.worker?.disability || 0, unorganised: existingHousehold?.worker?.unorganised !== undefined ? existingHousehold.worker.unorganised : true, epfoCovered: existingHousehold?.worker?.epfoCovered || false, farmer: existingHousehold?.worker?.farmer || false,
     // from verify screen
     phone: worker?.phone || "",
     workerId: worker?.workerId || "",
@@ -4579,13 +4570,13 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
     aadhaarLast4: worker?.aadhaarLast4 || "",
     aadhaarVerified: worker?.aadhaarVerified || false,
     // doc health — filled by AI or Aadhaar scan
-    aadhaarName: "", aadhaarAddressState: "West Bengal",
+    aadhaarName: existingHousehold?.worker?.aadhaarName || "", aadhaarAddressState: existingHousehold?.worker?.aadhaarAddressState || "West Bengal",
     aadhaarMobileLinked: worker?.pendingMobileLink ? false : true,
-    bankAccount: false, bankAccountName: "", bankAccountNo: "", bankName: "", bankAadhaarSeeded: false,
-    casteCert: false, casteCertExpiry: "", incomeCertAvailable: false, annualIncome: "",
-    voterId: "", panNumber: "",
+    bankAccount: existingHousehold?.worker?.bankAccount || false, bankAccountName: existingHousehold?.worker?.bankAccountName || "", bankAccountNo: existingHousehold?.worker?.bankAccountNo || "", bankName: existingHousehold?.worker?.bankName || "", bankAadhaarSeeded: existingHousehold?.worker?.bankAadhaarSeeded || false,
+    casteCert: existingHousehold?.worker?.casteCert || false, casteCertExpiry: existingHousehold?.worker?.casteCertExpiry || "", incomeCertAvailable: existingHousehold?.worker?.incomeCertAvailable || false, annualIncome: existingHousehold?.worker?.annualIncome || "",
+    voterId: existingHousehold?.worker?.voterId || "", panNumber: existingHousehold?.worker?.panNumber || "",
     // flags
-    aadhaar: !worker?.noAadhaar,
+    aadhaar: existingHousehold?.worker?.aadhaar || !worker?.noAadhaar,
   });
 
   // ── Docs scanned for worker ──────────────────────────────────────────────────
