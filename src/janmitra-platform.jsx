@@ -1999,6 +1999,15 @@ function crossCompareDocuments(scannedDocs) {
       });
     }
   }
+  if (aadhaar?.addressState && aadhaar.addressState !== "West Bengal") {
+    mismatches.push({
+      type: "address_state", severity: "critical",
+      title: `Aadhaar address: ${aadhaar.addressState} — not West Bengal`,
+      detail: `Aadhaar shows ${aadhaar.addressState} address. All WB schemes require WB address.`,
+      docA: "Aadhaar", valA: aadhaar.address,
+      fix: "AADHAAR_ADDR_OUTSTATE",
+    });
+  }
   if (caste?.issueDate) {
     const parts = (caste.issueDate || "").split("/");
     if (parts.length === 3) {
@@ -4276,17 +4285,10 @@ function VerifyScreen({ onVerified }) {
   const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [aadhaarLast4, setAadhaarLast4] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("phone");
+  const [step, setStep] = useState("phone"); // phone | otp_sent | no_link | no_aadhaar
   const [lang, setLang] = useState("en");
-  const [resendTimer, setResendTimer] = useState(0);
-  const [resending, setResending] = useState(false);
 
-  useEffect(() => {
-    if (resendTimer <= 0) return;
-    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendTimer]);
-
+  // Extract last 4 whenever full number typed
   const handleAadhaarChange = (val) => {
     const digits = val.replace(/\D/g, "").slice(0, 12);
     setAadhaarNumber(digits);
@@ -4360,7 +4362,7 @@ function VerifyScreen({ onVerified }) {
             <input value={workerId} onChange={e => setWorkerId(e.target.value)} placeholder="Leave blank if unknown" style={inputStyle} />
           </div>
 
-          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");setResendTimer(30);}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
+          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
             📲 Send OTP to {phone || "mobile"}
           </Button>
 
@@ -4398,35 +4400,6 @@ function VerifyScreen({ onVerified }) {
             <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,"").slice(0,6))}
               type="tel" placeholder="6-digit OTP" style={{ ...inputStyle, letterSpacing: 6, fontSize: 18 }} />
           </div>
-
-          {/* Resend OTP */}
-          <div style={{ marginBottom: 16 }}>
-            <button
-              disabled={resendTimer > 0 || resending}
-              onClick={async () => {
-                setResending(true);
-                try {
-                  const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", mobile: phone }) });
-                  const d = await r.json();
-                  if (d.success) { window._jansetuOtp = d.otp; setOtp(""); setResendTimer(30); }
-                  else { alert("Failed to resend OTP: " + d.error); }
-                } catch (e) { alert("Error: " + e.message); }
-                setResending(false);
-              }}
-              style={{
-                width: "100%", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
-                background: resendTimer > 0 ? "#F1F5F9" : "#FEF3E2",
-                border: `1.5px solid ${resendTimer > 0 ? "#D0D8E4" : COLORS.saffron}`,
-                color: resendTimer > 0 ? "#94A3B8" : COLORS.saffron,
-                cursor: resendTimer > 0 ? "not-allowed" : "pointer",
-                opacity: resending ? 0.6 : 1,
-                transition: "all 0.3s ease",
-              }}
-            >
-              {resending ? "📲 Sending new OTP..." : resendTimer > 0 ? `🔄 Resend OTP (${resendTimer}s)` : "🔄 Resend OTP Now"}
-            </button>
-          </div>
-
           <div style={{ background: "#EFF8F3", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.green }}>
             🔒 Aadhaar number is used only for identity consent — not stored in our system.
           </div>
@@ -4522,8 +4495,6 @@ function VerifyScreen({ onVerified }) {
   );
 }
 
-
-
 // ─── SCREEN 2: HOUSEHOLD BUILDER ──────────────────────────────────────────────
 // Member doc upload component (reused for each family member)
 function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
@@ -4558,11 +4529,11 @@ function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
   );
 }
 
-function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
+function HouseholdScreen({ worker, onComplete, onBack }) {
   // ── Worker data — AI-filled + manual ────────────────────────────────────────
   const [workerData, setWorkerData] = useState({
-    name: existingHousehold?.worker?.name || "", age: existingHousehold?.worker?.age || "", gender: existingHousehold?.worker?.gender || "male", caste: existingHousehold?.worker?.caste || "", maritalStatus: existingHousehold?.worker?.maritalStatus || "married",
-    disability: existingHousehold?.worker?.disability || 0, unorganised: existingHousehold?.worker?.unorganised !== undefined ? existingHousehold.worker.unorganised : true, epfoCovered: existingHousehold?.worker?.epfoCovered || false, farmer: existingHousehold?.worker?.farmer || false,
+    name: "", age: "", gender: "male", caste: "", maritalStatus: "married",
+    disability: 0, unorganised: true, epfoCovered: false, farmer: false,
     // from verify screen
     phone: worker?.phone || "",
     workerId: worker?.workerId || "",
@@ -4570,21 +4541,21 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
     aadhaarLast4: worker?.aadhaarLast4 || "",
     aadhaarVerified: worker?.aadhaarVerified || false,
     // doc health — filled by AI or Aadhaar scan
-    aadhaarName: existingHousehold?.worker?.aadhaarName || "", aadhaarAddressState: existingHousehold?.worker?.aadhaarAddressState || "West Bengal",
+    aadhaarName: "", aadhaarAddressState: "West Bengal",
     aadhaarMobileLinked: worker?.pendingMobileLink ? false : true,
-    bankAccount: existingHousehold?.worker?.bankAccount || false, bankAccountName: existingHousehold?.worker?.bankAccountName || "", bankAccountNo: existingHousehold?.worker?.bankAccountNo || "", bankName: existingHousehold?.worker?.bankName || "", bankAadhaarSeeded: existingHousehold?.worker?.bankAadhaarSeeded || false,
-    casteCert: existingHousehold?.worker?.casteCert || false, casteCertExpiry: existingHousehold?.worker?.casteCertExpiry || "", incomeCertAvailable: existingHousehold?.worker?.incomeCertAvailable || false, annualIncome: existingHousehold?.worker?.annualIncome || "",
-    voterId: existingHousehold?.worker?.voterId || "", panNumber: existingHousehold?.worker?.panNumber || "",
+    bankAccount: false, bankAccountName: "", bankAccountNo: "", bankName: "", bankAadhaarSeeded: false,
+    casteCert: false, casteCertExpiry: "", incomeCertAvailable: false, annualIncome: "",
+    voterId: "", panNumber: "",
     // flags
-    aadhaar: existingHousehold?.worker?.aadhaar || !worker?.noAadhaar,
+    aadhaar: !worker?.noAadhaar,
   });
 
   // ── Docs scanned for worker ──────────────────────────────────────────────────
-  const [scannedDocs, setScannedDocs] = useState(existingHousehold?.scannedDocs || {});
+  const [scannedDocs, setScannedDocs] = useState({});
   const [mismatches, setMismatches] = useState(null); // null = not checked yet
 
   // ── Family members ───────────────────────────────────────────────────────────
-  const [members, setMembers] = useState(existingHousehold?.members || []);
+  const [members, setMembers] = useState([]);
   const [addingMember, setAddingMember] = useState(false);
   const [newMember, setNewMember] = useState({
     name: "", age: "", gender: "female", relation: "wife", caste: "",
@@ -4698,10 +4669,6 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   };
 
   const addMember = () => {
-    const idx = members.length;
-    Object.entries(newMemberDocs).forEach(([key, data]) => {
-      setScannedDocs(prev => ({ ...prev, [`member_${idx}_${key}`]: data }));
-    });
     setMembers(p => [...p, { ...newMember }]);
     setAddingMember(false);
     setNewMember({ name: "", age: "", gender: "female", relation: "wife", caste: "", maritalStatus: "married", disability: 0, student: false, bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false, aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal" });
@@ -4797,10 +4764,10 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, marginBottom: 10, letterSpacing: 0.5 }}>✍️ FILL MANUALLY — agent asks worker</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
             <Input label="Gender" value={W.gender} onChange={v => setW("gender", v)} options={[{value:"male",label:"Male"},{value:"female",label:"Female"},{value:"other",label:"Other"}]} />
-
+            <Input label="Caste Category" value={W.caste} onChange={v => setW("caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
             <Input label="Marital Status" value={W.maritalStatus} onChange={v => setW("maritalStatus", v)} options={["married","unmarried","widow"]} />
-
-
+            <Input label="Annual Household Income (₹)" value={W.annualIncome} onChange={v => setW("annualIncome", v)} placeholder="e.g. 120000" type="number" />
+            <Input label="Disability %" value={W.disability} onChange={v => setW("disability", parseInt(v)||0)} type="number" placeholder="0 if none" />
             <Input label="Wife's Name" value={W.wifeName || ""} onChange={v => setW("wifeName", v)} placeholder="If married" />
           </div>
 
@@ -4954,7 +4921,6 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
             scannedDocMismatches: mismatches || [],
           },
           members,
-          scannedDocs,
         })} variant="primary" size="lg" disabled={!workerData.name || !workerData.age}>
           Continue to Doc Health Check →
         </Button>
@@ -4968,64 +4934,36 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
 
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
 function QuestionnaireScreen({ household, onComplete, onBack }) {
-  const worker = household?.worker || {};
-  const members = household?.members || [];
-  const [caste, setCaste] = useState(worker.caste || "");
-  const [disability, setDisability] = useState(worker.disability || 0);
-  const [monthlyIncome, setMonthlyIncome] = useState(worker.annualIncome ? String(Math.round(parseInt(worker.annualIncome) / 12)) : "");
-  const [annualIncome, setAnnualIncome] = useState(worker.annualIncome || "");
+  const [monthlyIncome, setMonthlyIncome] = useState("");
+  const [annualIncome, setAnnualIncome] = useState("");
   const [rationCard, setRationCard] = useState("");
   const [district] = useState("Paschim Bardhaman");
-  const [memberData, setMemberData] = useState(members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
-  const handleMonthlyChange = (v) => { setMonthlyIncome(v); if (v) setAnnualIncome(String(parseInt(v) * 12 || 0)); else setAnnualIncome(""); };
-  const handleAnnualChange = (v) => { setAnnualIncome(v); if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0)); else setMonthlyIncome(""); };
-  const updateMember = (i, key, val) => setMemberData(prev => prev.map((m, j) => j === i ? { ...m, [key]: val } : m));
+
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Household" />}
-      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>Eligibility Questions</h2>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>Fill details for worker and each family member</p>
+      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📋 Household Details</h2>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>A few more details to find all eligible schemes</p>
+
       <Card style={{ background: "#EFF8F3", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>Location (Pre-filled)</div>
-        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal - {district}</div>
+        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>📍 Location (Pre-filled)</div>
+        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal · {district}</div>
       </Card>
-      <Card style={{ marginBottom: 16, background: "#F9F5FF" }}>
-        <div style={{ fontWeight: 800, color: COLORS.navy, marginBottom: 12, fontSize: 15 }}>Worker: {worker.name || "Primary Worker"}</div>
-        <Input label="Caste Category" value={caste} onChange={setCaste} options={["General","SC","ST","OBC-A","OBC-B"]} required />
-        <Input label="Disability %" value={disability} onChange={v => setDisability(parseInt(v)||0)} type="number" placeholder="0 if none" />
-        <Input label="Household Monthly Income" value={monthlyIncome} onChange={handleMonthlyChange} type="number" placeholder="e.g. 8000" required />
-        <Input label="Household Annual Income" value={annualIncome} onChange={handleAnnualChange} type="number" placeholder="e.g. 96000" required />
-        <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes - PHH","Yes - AAY","Yes - SPHH","No"]} required />
-      </Card>
-      {memberData.map((md, i) => (
-        <Card key={i} style={{ marginBottom: 12, border: "1.5px solid #E8EDF3" }}>
-          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10, fontSize: 14 }}>
-            {members[i]?.name || "Member"} <span style={{ color: "#7A8A9A", fontWeight: 400, fontSize: 12 }}>({members[i]?.relation}, Age {members[i]?.age})</span>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
-            <Input label="Caste" value={md.caste} onChange={v => updateMember(i, "caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
-            <Input label="Disability %" value={md.disability} onChange={v => updateMember(i, "disability", parseInt(v)||0)} type="number" placeholder="0" />
-          </div>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
-            {[["student", "Student"], ["bankAccount", "Has Bank Account"], ["bankInOwnName", "Account in own name"], ["pregnant", "Pregnant"], ["firstChild", "First child (PMMVY)"]].map(([k, l]) => (
-              <label key={k} style={{ fontSize: 12, color: COLORS.slate, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-                <input type="checkbox" checked={!!md[k]} onChange={e => updateMember(i, k, e.target.checked)} /> {l}
-              </label>
-            ))}
-          </div>
-        </Card>
-      ))}
-      {members.length === 0 && (
-        <div style={{ background: "#F8FAFD", borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 13, color: "#7A8A9A", textAlign: "center" }}>
-          No family members added. Go back to add members if needed.
-        </div>
-      )}
+
+      <Input label="Household Monthly Income (₹)" value={monthlyIncome} onChange={setMonthlyIncome} type="number" placeholder="e.g. 8000" required />
+      <Input label="Household Annual Income (₹)" value={annualIncome} onChange={setAnnualIncome} type="number" placeholder="e.g. 96000" required />
+      <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes – PHH","Yes – AAY","Yes – SPHH","No"]} required />
+
+      <div style={{ background: COLORS.amberLight, border: `1px solid ${COLORS.gold}40`, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13, color: COLORS.amber }}>
+        ℹ️ Worker & family details from the previous step will be used for eligibility. Additional scheme-specific questions will be asked during application.
+      </div>
+
       <Button
-        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability, memberData })}
+        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard })}
         variant="primary" size="lg"
-        disabled={!monthlyIncome || !annualIncome || !rationCard || !caste}
+        disabled={!monthlyIncome || !annualIncome || !rationCard}
       >
-        Find Eligible Schemes
+        Find Eligible Schemes →
       </Button>
     </div>
   );
@@ -5036,25 +4974,18 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
   const [filter, setFilter] = useState("All");
   const categories = ["All", "Central", "West Bengal"];
   const filtered = filter === "All" ? results : results.filter(r => r.scheme.category === filter);
-  const diffColor = d => d === "Easy" ? COLORS.green : d === "Medium" ? COLORS.amber : COLORS.red;
 
-  // Group by person
-  const grouped = {};
-  filtered.forEach(r => {
-    const key = r.person.name + "|" + r.person.relation;
-    if (!grouped[key]) grouped[key] = { person: r.person, schemes: [] };
-    grouped[key].schemes.push(r);
-  });
-  const personGroups = Object.values(grouped);
+  const diffColor = d => d === "Easy" ? COLORS.green : d === "Medium" ? COLORS.amber : COLORS.red;
 
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Questions" />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>Eligible Schemes</h2>
-        <Badge label={results.length + " found"} color={COLORS.green} />
+        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>🎯 Eligible Schemes</h2>
+        <Badge label={`${results.length} found`} color={COLORS.green} />
       </div>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Grouped by family member, sorted by easiest first</p>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Sorted by easiest first, highest benefit within same difficulty</p>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {categories.map(c => (
           <button key={c} onClick={() => setFilter(c)} style={{
@@ -5063,52 +4994,44 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
           }}>{c}</button>
         ))}
       </div>
+
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>No schemes found for this filter.</div>
       )}
-      {personGroups.map((group, gi) => (
-        <div key={gi} style={{ marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "10px 14px", background: COLORS.navy, borderRadius: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: COLORS.saffron, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16 }}>
-              {group.person.name?.charAt(0) || "?"}
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, color: "#fff", fontSize: 15 }}>{group.person.name}</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{group.person.relation} | {group.schemes.length} scheme{group.schemes.length !== 1 ? "s" : ""} eligible</div>
-            </div>
-          </div>
-          {group.schemes.map((r, i) => (
-            <Card key={i} style={{ marginBottom: 10, borderLeft: "4px solid " + COLORS.saffron }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
-                    <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
-                  </div>
-                  <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
-                    {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                    <Badge label={r.scheme.benefit} color={COLORS.green} />
-                    <Badge label={r.scheme.category} color={COLORS.navy} />
-                    <Badge label={"Difficulty: " + r.scheme.difficultyLabel} color={diffColor(r.scheme.difficultyLabel)} />
-                  </div>
-                  {r.reasons && r.reasons.length > 0 && (
-                    <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
-                      Why eligible: {r.reasons.join(" | ")}
-                    </div>
-                  )}
-                  <div style={{ fontSize: 12, color: "#7A8A9A" }}>
-                    Docs needed: {r.scheme.docs.join(", ")}
-                  </div>
+
+      {filtered.map((r, i) => (
+        <Card key={i} style={{ marginBottom: 12, borderLeft: `4px solid ${COLORS.saffron}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
+                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>For: {r.person.name} ({r.person.relation})</div>
                 </div>
-                <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
-                  Apply
-                </Button>
               </div>
-            </Card>
-          ))}
-        </div>
+              <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
+                {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <Badge label={r.scheme.benefit} color={COLORS.green} />
+                <Badge label={r.scheme.category} color={COLORS.navy} />
+                <Badge label={`Difficulty: ${r.scheme.difficultyLabel}`} color={diffColor(r.scheme.difficultyLabel)} />
+              </div>
+              {r.reasons && r.reasons.length > 0 && (
+                <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
+                  ✅ Why eligible: {r.reasons.join(" · ")}
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: "#7A8A9A" }}>
+                📎 Docs needed: {r.scheme.docs.join(", ")}
+              </div>
+            </div>
+            <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
+              Apply →
+            </Button>
+          </div>
+        </Card>
       ))}
     </div>
   );
@@ -6286,7 +6209,6 @@ export default function JanSetuApp() {
               {screen === "household" && (
                 <HouseholdScreen
                   worker={verifiedWorker}
-                  existingHousehold={household}
                   onComplete={handleHousehold}
                   onBack={() => setScreen("intent")}
                 />
