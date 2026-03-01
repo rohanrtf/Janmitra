@@ -6245,8 +6245,9 @@ export default function JanSetuApp() {
                 />
               )}
               {screen === "household" && (
-                {
+                <HouseholdScreen
                   worker={verifiedWorker}
+                  existingHousehold={household}
                   onComplete={handleHousehold}
                   onBack={() => setScreen("intent")}
                 />
