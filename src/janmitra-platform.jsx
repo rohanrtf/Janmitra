@@ -4561,12 +4561,9 @@ function VerifyScreen({ onVerified }) {
 }
 ```
 
-4. **Save** (Cmd+S)
-5. **Push:**
+
 ```
-git add src/janmitra-platform.jsx
-git commit -m "Fix VerifyScreen - clean Resend OTP"
-git push
+
 // ─── SCREEN 2: HOUSEHOLD BUILDER ──────────────────────────────────────────────
 // Member doc upload component (reused for each family member)
 function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
