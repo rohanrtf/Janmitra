@@ -4287,6 +4287,26 @@ function VerifyScreen({ onVerified }) {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState("phone"); // phone | otp_sent | no_link | no_aadhaar
   const [lang, setLang] = useState("en");
+  const [resendTimer, setResendTimer] = useState(0);
+  const [resending, setResending] = useState(false);
+
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+  const [lang, setLang] = useState("en");
+  const [resendTimer, setResendTimer] = useState(0);
+  const [resending, setResending] = useState(false);
+
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+  const [lang, setLang] = useState("en");
 
   // Extract last 4 whenever full number typed
   const handleAadhaarChange = (val) => {
@@ -4362,35 +4382,94 @@ function VerifyScreen({ onVerified }) {
             <input value={workerId} onChange={e => setWorkerId(e.target.value)} placeholder="Leave blank if unknown" style={inputStyle} />
           </div>
 
-          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
+          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent")setResendTimer(30);}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
             📲 Send OTP to {phone || "mobile"}
           </Button>
 
           {!canSendOtp && (
             <div style={{ fontSize: 11, color: "#7A8A9A", marginTop: 8, textAlign: "center" }}>
               {phone.length < 10 ? "Enter 10-digit mobile · " : ""}
-              {aadhaarNumber.length < 12 ? "Enter 12-digit Aadhaar number" : ""}
-            </div>
-          )}
-
-          <div style={{ marginTop: 20, borderTop: "1px solid #E8EDF3", paddingTop: 20 }}>
-            <div style={{ fontSize: 12, color: "#7A8A9A", textAlign: "center", marginBottom: 12 }}>
-              Is there a problem with the Aadhaar?
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep("no_link")} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${COLORS.amber}`, background: "#FEF3E2", color: COLORS.amber, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
-                📵 Mobile not linked<br/><span style={{ fontWeight: 400, fontSize: 11 }}>to Aadhaar</span>
-              </button>
-              <button onClick={() => setStep("no_aadhaar")} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${COLORS.red}`, background: "#FADBD8", color: COLORS.red, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
-                ❌ No Aadhaar<br/><span style={{ fontWeight: 400, fontSize: 11 }}>card yet</span>
-              </button>
-            </div>
+              {/* ── STEP 2a: OTP sent ── */}
+      {step === "otp_sent" && (
+        <>
+          <div style={{ background: COLORS.greenPale, border: `1px solid ${COLORS.green}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: COLORS.green }}>
+            ✅ OTP sent to <strong>{phone}</strong>
           </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: COLORS.slate, marginBottom: 5 }}>Enter OTP</label>
+            <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,"").slice(0,6))}
+              type="tel" placeholder="6-digit OTP" style={{ ...inputStyle, letterSpacing: 6, fontSize: 18 }} />
+          </div>
+
+          {/* Resend OTP with visual countdown */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 16, gap: 10 }}>
+            {resendTimer > 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ position: "relative", width: 48, height: 48 }}>
+                  <svg width="48" height="48" viewBox="0 0 48 48" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="24" cy="24" r="20" fill="none" stroke="#E8EDF3" strokeWidth="3" />
+                    <circle cx="24" cy="24" r="20" fill="none" stroke={COLORS.saffron} strokeWidth="3"
+                      strokeDasharray={`${2 * Math.PI * 20}`}
+                      strokeDashoffset={`${2 * Math.PI * 20 * (1 - resendTimer / 30)}`}
+                      strokeLinecap="round"
+                      style={{ transition: "stroke-dashoffset 1s linear" }} />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: COLORS.saffron }}>
+                    {resendTimer}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.slate }}>OTP sent to {phone}</div>
+                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>Resend available in {resendTimer} seconds</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#FEF3E2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>⏰</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.slate }}>Didn't receive OTP?</div>
+                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>Network issues? Tap resend below</div>
+                </div>
+              </div>
+            )}
+            <button
+              disabled={resendTimer > 0 || resending}
+              onClick={async () => {
+                setResending(true);
+                try {
+                  const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", mobile: phone }) });
+                  const d = await r.json();
+                  if (d.success) { window._jansetuOtp = d.otp; setOtp(""); setResendTimer(30); }
+                  else { alert("Failed to resend OTP: " + d.error); }
+                } catch (e) { alert("Error: " + e.message); }
+                setResending(false);
+              }}
+              style={{
+                width: "100%", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                background: resendTimer > 0 ? "#F1F5F9" : "#FEF3E2",
+                border: `1.5px solid ${resendTimer > 0 ? "#D0D8E4" : COLORS.saffron}`,
+                color: resendTimer > 0 ? "#94A3B8" : COLORS.saffron,
+                cursor: resendTimer > 0 ? "not-allowed" : "pointer",
+                opacity: resending ? 0.6 : 1,
+                transition: "all 0.3s ease",
+              }}
+            >
+              {resending ? "📲 Sending new OTP..." : resendTimer > 0 ? `🔄 Resend OTP (${resendTimer}s)` : "🔄 Resend OTP Now"}
+            </button>
+          </div>
+
+          <div style={{ background: "#EFF8F3", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.green }}>
+            🔒 Aadhaar number is used only for identity consent — not stored in our system.
+          </div>
+          <Button onClick={() => { if(otp === window._jansetuOtp){ onVerified({ phone, workerId, aadhaarNumber, aadhaarLast4, aadhaarVerified: true, verifyMode: "otp" }); } else { alert("Incorrect OTP. Please try again."); } }}
+            variant="primary" size="lg" disabled={otp.length < 4}>
+            ✅ Verify & Continue
+          </Button>
+          <button onClick={() => setStep("phone")} style={{ background: "none", border: "none", color: COLORS.saffron, fontSize: 13, cursor: "pointer", marginTop: 14, display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
+            ← Back
+          </button>
         </>
       )}
-
-      {/* ── STEP 2a: OTP sent ── */}
-      {step === "otp_sent" && (
         <>
           <div style={{ background: COLORS.greenPale, border: `1px solid ${COLORS.green}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: COLORS.green }}>
             ✅ OTP sent to <strong>{phone}</strong>
