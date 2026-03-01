@@ -4559,10 +4559,8 @@ function VerifyScreen({ onVerified }) {
     </div>
   );
 }
-```
 
 
-```
 
 // ─── SCREEN 2: HOUSEHOLD BUILDER ──────────────────────────────────────────────
 // Member doc upload component (reused for each family member)
