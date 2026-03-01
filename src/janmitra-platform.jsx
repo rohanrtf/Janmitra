@@ -4408,37 +4408,8 @@ function VerifyScreen({ onVerified }) {
               type="tel" placeholder="6-digit OTP" style={{ ...inputStyle, letterSpacing: 6, fontSize: 18 }} />
           </div>
 
-          {/* Resend OTP with visual countdown */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 16, gap: 10 }}>
-            {resendTimer > 0 ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ position: "relative", width: 48, height: 48 }}>
-                  <svg width="48" height="48" viewBox="0 0 48 48" style={{ transform: "rotate(-90deg)" }}>
-                    <circle cx="24" cy="24" r="20" fill="none" stroke="#E8EDF3" strokeWidth="3" />
-                    <circle cx="24" cy="24" r="20" fill="none" stroke={COLORS.saffron} strokeWidth="3"
-                      strokeDasharray={`${2 * Math.PI * 20}`}
-                      strokeDashoffset={`${2 * Math.PI * 20 * (1 - resendTimer / 30)}`}
-                      strokeLinecap="round"
-                      style={{ transition: "stroke-dashoffset 1s linear" }} />
-                  </svg>
-                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: COLORS.saffron }}>
-                    {resendTimer}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.slate }}>OTP sent to {phone}</div>
-                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>Resend available in {resendTimer} seconds</div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#FEF3E2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>⏰</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.slate }}>Didn't receive OTP?</div>
-                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>Network issues? Tap resend below</div>
-                </div>
-              </div>
-            )}
+          {/* Resend OTP */}
+          <div style={{ marginBottom: 16 }}>
             <button
               disabled={resendTimer > 0 || resending}
               onClick={async () => {
