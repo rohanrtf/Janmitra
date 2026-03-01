@@ -1999,15 +1999,6 @@ function crossCompareDocuments(scannedDocs) {
       });
     }
   }
-  if (aadhaar?.addressState && aadhaar.addressState !== "West Bengal") {
-    mismatches.push({
-      type: "address_state", severity: "critical",
-      title: `Aadhaar address: ${aadhaar.addressState} — not West Bengal`,
-      detail: `Aadhaar shows ${aadhaar.addressState} address. All WB schemes require WB address.`,
-      docA: "Aadhaar", valA: aadhaar.address,
-      fix: "AADHAAR_ADDR_OUTSTATE",
-    });
-  }
   if (caste?.issueDate) {
     const parts = (caste.issueDate || "").split("/");
     if (parts.length === 3) {
@@ -4285,10 +4276,17 @@ function VerifyScreen({ onVerified }) {
   const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [aadhaarLast4, setAadhaarLast4] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("phone"); // phone | otp_sent | no_link | no_aadhaar
+  const [step, setStep] = useState("phone");
   const [lang, setLang] = useState("en");
+  const [resendTimer, setResendTimer] = useState(0);
+  const [resending, setResending] = useState(false);
 
-  // Extract last 4 whenever full number typed
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendTimer]);
+
   const handleAadhaarChange = (val) => {
     const digits = val.replace(/\D/g, "").slice(0, 12);
     setAadhaarNumber(digits);
@@ -4362,7 +4360,7 @@ function VerifyScreen({ onVerified }) {
             <input value={workerId} onChange={e => setWorkerId(e.target.value)} placeholder="Leave blank if unknown" style={inputStyle} />
           </div>
 
-          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
+          <Button onClick={async () => { try { const r = await fetch("/api/otp", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"send",mobile:phone})}); const d = await r.json(); if(d.success){window._jansetuOtp=d.otp;setStep("otp_sent");setResendTimer(30);}else{alert("Failed to send OTP: "+d.error);} } catch(e){alert("Error: "+e.message);} }} variant="secondary" size="lg" disabled={!canSendOtp}>
             📲 Send OTP to {phone || "mobile"}
           </Button>
 
@@ -4400,6 +4398,35 @@ function VerifyScreen({ onVerified }) {
             <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,"").slice(0,6))}
               type="tel" placeholder="6-digit OTP" style={{ ...inputStyle, letterSpacing: 6, fontSize: 18 }} />
           </div>
+
+          {/* Resend OTP */}
+          <div style={{ marginBottom: 16 }}>
+            <button
+              disabled={resendTimer > 0 || resending}
+              onClick={async () => {
+                setResending(true);
+                try {
+                  const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", mobile: phone }) });
+                  const d = await r.json();
+                  if (d.success) { window._jansetuOtp = d.otp; setOtp(""); setResendTimer(30); }
+                  else { alert("Failed to resend OTP: " + d.error); }
+                } catch (e) { alert("Error: " + e.message); }
+                setResending(false);
+              }}
+              style={{
+                width: "100%", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+                background: resendTimer > 0 ? "#F1F5F9" : "#FEF3E2",
+                border: `1.5px solid ${resendTimer > 0 ? "#D0D8E4" : COLORS.saffron}`,
+                color: resendTimer > 0 ? "#94A3B8" : COLORS.saffron,
+                cursor: resendTimer > 0 ? "not-allowed" : "pointer",
+                opacity: resending ? 0.6 : 1,
+                transition: "all 0.3s ease",
+              }}
+            >
+              {resending ? "📲 Sending new OTP..." : resendTimer > 0 ? `🔄 Resend OTP (${resendTimer}s)` : "🔄 Resend OTP Now"}
+            </button>
+          </div>
+
           <div style={{ background: "#EFF8F3", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.green }}>
             🔒 Aadhaar number is used only for identity consent — not stored in our system.
           </div>
@@ -4495,6 +4522,8 @@ function VerifyScreen({ onVerified }) {
   );
 }
 
+
+
 // ─── SCREEN 2: HOUSEHOLD BUILDER ──────────────────────────────────────────────
 // Member doc upload component (reused for each family member)
 function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
@@ -4529,11 +4558,11 @@ function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
   );
 }
 
-function HouseholdScreen({ worker, onComplete, onBack }) {
+function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   // ── Worker data — AI-filled + manual ────────────────────────────────────────
   const [workerData, setWorkerData] = useState({
-    name: "", age: "", gender: "male", caste: "", maritalStatus: "married",
-    disability: 0, unorganised: true, epfoCovered: false, farmer: false,
+    name: existingHousehold?.worker?.name || "", age: existingHousehold?.worker?.age || "", gender: existingHousehold?.worker?.gender || "male", caste: existingHousehold?.worker?.caste || "", maritalStatus: existingHousehold?.worker?.maritalStatus || "married",
+    disability: existingHousehold?.worker?.disability || 0, unorganised: existingHousehold?.worker?.unorganised !== undefined ? existingHousehold.worker.unorganised : true, epfoCovered: existingHousehold?.worker?.epfoCovered || false, farmer: existingHousehold?.worker?.farmer || false,
     // from verify screen
     phone: worker?.phone || "",
     workerId: worker?.workerId || "",
@@ -4541,21 +4570,21 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
     aadhaarLast4: worker?.aadhaarLast4 || "",
     aadhaarVerified: worker?.aadhaarVerified || false,
     // doc health — filled by AI or Aadhaar scan
-    aadhaarName: "", aadhaarAddressState: "West Bengal",
+    aadhaarName: existingHousehold?.worker?.aadhaarName || "", aadhaarAddressState: existingHousehold?.worker?.aadhaarAddressState || "West Bengal",
     aadhaarMobileLinked: worker?.pendingMobileLink ? false : true,
-    bankAccount: false, bankAccountName: "", bankAccountNo: "", bankName: "", bankAadhaarSeeded: false,
-    casteCert: false, casteCertExpiry: "", incomeCertAvailable: false, annualIncome: "",
-    voterId: "", panNumber: "",
+    bankAccount: existingHousehold?.worker?.bankAccount || false, bankAccountName: existingHousehold?.worker?.bankAccountName || "", bankAccountNo: existingHousehold?.worker?.bankAccountNo || "", bankName: existingHousehold?.worker?.bankName || "", bankAadhaarSeeded: existingHousehold?.worker?.bankAadhaarSeeded || false,
+    casteCert: existingHousehold?.worker?.casteCert || false, casteCertExpiry: existingHousehold?.worker?.casteCertExpiry || "", incomeCertAvailable: existingHousehold?.worker?.incomeCertAvailable || false, annualIncome: existingHousehold?.worker?.annualIncome || "",
+    voterId: existingHousehold?.worker?.voterId || "", panNumber: existingHousehold?.worker?.panNumber || "",
     // flags
-    aadhaar: !worker?.noAadhaar,
+    aadhaar: existingHousehold?.worker?.aadhaar || !worker?.noAadhaar,
   });
 
   // ── Docs scanned for worker ──────────────────────────────────────────────────
-  const [scannedDocs, setScannedDocs] = useState({});
+  const [scannedDocs, setScannedDocs] = useState(existingHousehold?.scannedDocs || {});
   const [mismatches, setMismatches] = useState(null); // null = not checked yet
 
   // ── Family members ───────────────────────────────────────────────────────────
-  const [members, setMembers] = useState([]);
+  const [members, setMembers] = useState(existingHousehold?.members || []);
   const [addingMember, setAddingMember] = useState(false);
   const [newMember, setNewMember] = useState({
     name: "", age: "", gender: "female", relation: "wife", caste: "",
@@ -4669,6 +4698,10 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
   };
 
   const addMember = () => {
+    const idx = members.length;
+    Object.entries(newMemberDocs).forEach(([key, data]) => {
+      setScannedDocs(prev => ({ ...prev, [`member_${idx}_${key}`]: data }));
+    });
     setMembers(p => [...p, { ...newMember }]);
     setAddingMember(false);
     setNewMember({ name: "", age: "", gender: "female", relation: "wife", caste: "", maritalStatus: "married", disability: 0, student: false, bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false, aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal" });
@@ -4764,10 +4797,10 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, marginBottom: 10, letterSpacing: 0.5 }}>✍️ FILL MANUALLY — agent asks worker</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
             <Input label="Gender" value={W.gender} onChange={v => setW("gender", v)} options={[{value:"male",label:"Male"},{value:"female",label:"Female"},{value:"other",label:"Other"}]} />
-            <Input label="Caste Category" value={W.caste} onChange={v => setW("caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
+
             <Input label="Marital Status" value={W.maritalStatus} onChange={v => setW("maritalStatus", v)} options={["married","unmarried","widow"]} />
-            <Input label="Annual Household Income (₹)" value={W.annualIncome} onChange={v => setW("annualIncome", v)} placeholder="e.g. 120000" type="number" />
-            <Input label="Disability %" value={W.disability} onChange={v => setW("disability", parseInt(v)||0)} type="number" placeholder="0 if none" />
+
+
             <Input label="Wife's Name" value={W.wifeName || ""} onChange={v => setW("wifeName", v)} placeholder="If married" />
           </div>
 
@@ -4921,6 +4954,7 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
             scannedDocMismatches: mismatches || [],
           },
           members,
+          scannedDocs,
         })} variant="primary" size="lg" disabled={!workerData.name || !workerData.age}>
           Continue to Doc Health Check →
         </Button>
@@ -4934,36 +4968,64 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
 
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
 function QuestionnaireScreen({ household, onComplete, onBack }) {
-  const [monthlyIncome, setMonthlyIncome] = useState("");
-  const [annualIncome, setAnnualIncome] = useState("");
+  const worker = household?.worker || {};
+  const members = household?.members || [];
+  const [caste, setCaste] = useState(worker.caste || "");
+  const [disability, setDisability] = useState(worker.disability || 0);
+  const [monthlyIncome, setMonthlyIncome] = useState(worker.annualIncome ? String(Math.round(parseInt(worker.annualIncome) / 12)) : "");
+  const [annualIncome, setAnnualIncome] = useState(worker.annualIncome || "");
   const [rationCard, setRationCard] = useState("");
   const [district] = useState("Paschim Bardhaman");
-
+  const [memberData, setMemberData] = useState(members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
+  const handleMonthlyChange = (v) => { setMonthlyIncome(v); if (v) setAnnualIncome(String(parseInt(v) * 12 || 0)); else setAnnualIncome(""); };
+  const handleAnnualChange = (v) => { setAnnualIncome(v); if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0)); else setMonthlyIncome(""); };
+  const updateMember = (i, key, val) => setMemberData(prev => prev.map((m, j) => j === i ? { ...m, [key]: val } : m));
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Household" />}
-      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📋 Household Details</h2>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>A few more details to find all eligible schemes</p>
-
+      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>Eligibility Questions</h2>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>Fill details for worker and each family member</p>
       <Card style={{ background: "#EFF8F3", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>📍 Location (Pre-filled)</div>
-        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal · {district}</div>
+        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>Location (Pre-filled)</div>
+        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal - {district}</div>
       </Card>
-
-      <Input label="Household Monthly Income (₹)" value={monthlyIncome} onChange={setMonthlyIncome} type="number" placeholder="e.g. 8000" required />
-      <Input label="Household Annual Income (₹)" value={annualIncome} onChange={setAnnualIncome} type="number" placeholder="e.g. 96000" required />
-      <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes – PHH","Yes – AAY","Yes – SPHH","No"]} required />
-
-      <div style={{ background: COLORS.amberLight, border: `1px solid ${COLORS.gold}40`, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13, color: COLORS.amber }}>
-        ℹ️ Worker & family details from the previous step will be used for eligibility. Additional scheme-specific questions will be asked during application.
-      </div>
-
+      <Card style={{ marginBottom: 16, background: "#F9F5FF" }}>
+        <div style={{ fontWeight: 800, color: COLORS.navy, marginBottom: 12, fontSize: 15 }}>Worker: {worker.name || "Primary Worker"}</div>
+        <Input label="Caste Category" value={caste} onChange={setCaste} options={["General","SC","ST","OBC-A","OBC-B"]} required />
+        <Input label="Disability %" value={disability} onChange={v => setDisability(parseInt(v)||0)} type="number" placeholder="0 if none" />
+        <Input label="Household Monthly Income" value={monthlyIncome} onChange={handleMonthlyChange} type="number" placeholder="e.g. 8000" required />
+        <Input label="Household Annual Income" value={annualIncome} onChange={handleAnnualChange} type="number" placeholder="e.g. 96000" required />
+        <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes - PHH","Yes - AAY","Yes - SPHH","No"]} required />
+      </Card>
+      {memberData.map((md, i) => (
+        <Card key={i} style={{ marginBottom: 12, border: "1.5px solid #E8EDF3" }}>
+          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10, fontSize: 14 }}>
+            {members[i]?.name || "Member"} <span style={{ color: "#7A8A9A", fontWeight: 400, fontSize: 12 }}>({members[i]?.relation}, Age {members[i]?.age})</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+            <Input label="Caste" value={md.caste} onChange={v => updateMember(i, "caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
+            <Input label="Disability %" value={md.disability} onChange={v => updateMember(i, "disability", parseInt(v)||0)} type="number" placeholder="0" />
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
+            {[["student", "Student"], ["bankAccount", "Has Bank Account"], ["bankInOwnName", "Account in own name"], ["pregnant", "Pregnant"], ["firstChild", "First child (PMMVY)"]].map(([k, l]) => (
+              <label key={k} style={{ fontSize: 12, color: COLORS.slate, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!md[k]} onChange={e => updateMember(i, k, e.target.checked)} /> {l}
+              </label>
+            ))}
+          </div>
+        </Card>
+      ))}
+      {members.length === 0 && (
+        <div style={{ background: "#F8FAFD", borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 13, color: "#7A8A9A", textAlign: "center" }}>
+          No family members added. Go back to add members if needed.
+        </div>
+      )}
       <Button
-        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard })}
+        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability, memberData })}
         variant="primary" size="lg"
-        disabled={!monthlyIncome || !annualIncome || !rationCard}
+        disabled={!monthlyIncome || !annualIncome || !rationCard || !caste}
       >
-        Find Eligible Schemes →
+        Find Eligible Schemes
       </Button>
     </div>
   );
@@ -4974,18 +5036,25 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
   const [filter, setFilter] = useState("All");
   const categories = ["All", "Central", "West Bengal"];
   const filtered = filter === "All" ? results : results.filter(r => r.scheme.category === filter);
-
   const diffColor = d => d === "Easy" ? COLORS.green : d === "Medium" ? COLORS.amber : COLORS.red;
+
+  // Group by person
+  const grouped = {};
+  filtered.forEach(r => {
+    const key = r.person.name + "|" + r.person.relation;
+    if (!grouped[key]) grouped[key] = { person: r.person, schemes: [] };
+    grouped[key].schemes.push(r);
+  });
+  const personGroups = Object.values(grouped);
 
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Questions" />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>🎯 Eligible Schemes</h2>
-        <Badge label={`${results.length} found`} color={COLORS.green} />
+        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>Eligible Schemes</h2>
+        <Badge label={results.length + " found"} color={COLORS.green} />
       </div>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Sorted by easiest first, highest benefit within same difficulty</p>
-
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Grouped by family member, sorted by easiest first</p>
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {categories.map(c => (
           <button key={c} onClick={() => setFilter(c)} style={{
@@ -4994,56 +5063,155 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
           }}>{c}</button>
         ))}
       </div>
-
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>No schemes found for this filter.</div>
       )}
-
-      {filtered.map((r, i) => (
-        <Card key={i} style={{ marginBottom: 12, borderLeft: `4px solid ${COLORS.saffron}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
-                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>For: {r.person.name} ({r.person.relation})</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
-                {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <Badge label={r.scheme.benefit} color={COLORS.green} />
-                <Badge label={r.scheme.category} color={COLORS.navy} />
-                <Badge label={`Difficulty: ${r.scheme.difficultyLabel}`} color={diffColor(r.scheme.difficultyLabel)} />
-              </div>
-              {r.reasons && r.reasons.length > 0 && (
-                <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
-                  ✅ Why eligible: {r.reasons.join(" · ")}
-                </div>
-              )}
-              <div style={{ fontSize: 12, color: "#7A8A9A" }}>
-                📎 Docs needed: {r.scheme.docs.join(", ")}
-              </div>
+      {personGroups.map((group, gi) => (
+        <div key={gi} style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "10px 14px", background: COLORS.navy, borderRadius: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: COLORS.saffron, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16 }}>
+              {group.person.name?.charAt(0) || "?"}
             </div>
-            <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
-              Apply →
-            </Button>
+            <div>
+              <div style={{ fontWeight: 800, color: "#fff", fontSize: 15 }}>{group.person.name}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{group.person.relation} | {group.schemes.length} scheme{group.schemes.length !== 1 ? "s" : ""} eligible</div>
+            </div>
           </div>
-        </Card>
+          {group.schemes.map((r, i) => (
+            <Card key={i} style={{ marginBottom: 10, borderLeft: "4px solid " + COLORS.saffron }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
+                    <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
+                    {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                    <Badge label={r.scheme.benefit} color={COLORS.green} />
+                    <Badge label={r.scheme.category} color={COLORS.navy} />
+                    <Badge label={"Difficulty: " + r.scheme.difficultyLabel} color={diffColor(r.scheme.difficultyLabel)} />
+                  </div>
+                  {r.reasons && r.reasons.length > 0 && (
+                    <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
+                      Why eligible: {r.reasons.join(" | ")}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: "#7A8A9A" }}>
+                    Docs needed: {r.scheme.docs.join(", ")}
+                  </div>
+                </div>
+                <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
+                  Apply
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
       ))}
     </div>
   );
 }
 
 // ─── SCREEN 5: APPLICATION + DOC LOCKER ──────────────────────────────────────
-function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp }) {
-  const [docs, setDocs] = useState(result.scheme.docs.reduce((acc, d) => ({ ...acc, [d]: null }), {}));
+function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVault = {}, household = {} }) {
+  // ── Map scheme doc names → vault keys and scannedDocs keys ─────────────────
+  // This mapping connects the generic doc names from scheme.docs (e.g. "Aadhaar")
+  // to the actual keys used in docVault (sharedKeys) and household.scannedDocs
+  const DOC_VAULT_MAP = {
+    "Aadhaar":                  { vaultKeys: ["aadhaar_front"], scanKey: "aadhaar", label: "Aadhaar scan" },
+    "Aadhaar Card":             { vaultKeys: ["aadhaar_front"], scanKey: "aadhaar", label: "Aadhaar scan" },
+    "Worker's Aadhaar":         { vaultKeys: ["aadhaar_front","aadhaar_head"], scanKey: "aadhaar", label: "Worker Aadhaar" },
+    "Daughter's Aadhaar":       { vaultKeys: ["aadhaar_member2","aadhaar_member3"], scanKey: null, label: "Family Aadhaar" },
+    "Bank Passbook":            { vaultKeys: ["bank_passbook"], scanKey: "bank", label: "Bank passbook" },
+    "Caste Certificate":        { vaultKeys: ["father_caste"], scanKey: "caste", label: "Caste certificate" },
+    "Income Certificate":       { vaultKeys: [], scanKey: "income", label: "Income certificate" },
+    "Ration Card":              { vaultKeys: ["ration_card"], scanKey: null, label: "Ration card" },
+    "Photo":                    { vaultKeys: ["photo"], scanKey: null, label: "Photo" },
+    "Passport Photo":           { vaultKeys: ["photo"], scanKey: null, label: "Photo" },
+    "Address Proof":            { vaultKeys: ["address_proof","address_cert","ration_card"], scanKey: null, label: "Address proof" },
+    "WB Domicile / Address Proof": { vaultKeys: ["address_proof","address_cert","ration_card"], scanKey: null, label: "Address proof" },
+    "Voter ID":                 { vaultKeys: ["voter_id"], scanKey: "voter", label: "Voter ID" },
+    "Age Proof":                { vaultKeys: ["age_proof","dob_proof"], scanKey: null, label: "Age proof" },
+    "Disability Certificate":   { vaultKeys: ["medical_cert"], scanKey: null, label: "Disability certificate" },
+    "Birth Certificate":        { vaultKeys: ["dob_proof"], scanKey: "birth", label: "Birth certificate" },
+    "Marksheet":                { vaultKeys: [], scanKey: null, label: "Marksheet" },
+    "Admission Proof":          { vaultKeys: [], scanKey: null, label: "Admission proof" },
+    "School ID / Enrollment Certificate": { vaultKeys: [], scanKey: null, label: "School ID" },
+    "Marriage Certificate":     { vaultKeys: [], scanKey: null, label: "Marriage certificate" },
+    "Death Certificate (Husband)": { vaultKeys: [], scanKey: null, label: "Death certificate" },
+    "Land Records":             { vaultKeys: [], scanKey: null, label: "Land records" },
+    "MCP Card / Hospital Registration": { vaultKeys: [], scanKey: null, label: "MCP card" },
+    "Bank Account (girl's own)": { vaultKeys: ["bank_passbook"], scanKey: "bank", label: "Bank passbook" },
+    "Bank Account (mother's own)": { vaultKeys: ["bank_passbook"], scanKey: "bank", label: "Bank passbook" },
+    "Income Certificate (≤ ₹6,500/month)": { vaultKeys: [], scanKey: "income", label: "Income certificate" },
+    "Age Proof (daughter ≥18)": { vaultKeys: ["age_proof","dob_proof"], scanKey: null, label: "Age proof" },
+    "Previous Year Marksheet":  { vaultKeys: [], scanKey: null, label: "Marksheet" },
+    "School Bonafide Certificate": { vaultKeys: [], scanKey: null, label: "School certificate" },
+    "Bank Account (student's own)": { vaultKeys: ["bank_passbook"], scanKey: "bank", label: "Bank passbook" },
+    "Institution Enrollment Certificate": { vaultKeys: [], scanKey: null, label: "Enrollment certificate" },
+    "Passport Photo":           { vaultKeys: ["photo"], scanKey: null, label: "Photo" },
+    "Disability Certificate from Govt Hospital (CMO)": { vaultKeys: ["medical_cert"], scanKey: null, label: "Disability certificate" },
+  };
+
+  const scannedDocs = household?.scannedDocs || {};
+
+  // Check if a doc name has a match in vault or scanned docs
+  const findExistingDoc = (docName) => {
+    const mapping = DOC_VAULT_MAP[docName];
+    if (!mapping) return null;
+
+    // Check docVault (file uploads from DocDetailScreen)
+    for (const vk of (mapping.vaultKeys || [])) {
+      if (docVault[vk]) {
+        return { source: "vault", key: vk, data: docVault[vk], label: docVault[vk].name || mapping.label };
+      }
+    }
+
+    // Check scannedDocs (AI scans from HouseholdScreen)
+    if (mapping.scanKey && scannedDocs[mapping.scanKey]) {
+      return { source: "scan", key: mapping.scanKey, data: scannedDocs[mapping.scanKey], label: mapping.label };
+    }
+
+    // For member-specific docs, check member scans
+    if (docName.includes("Daughter") || docName.includes("girl")) {
+      const memberKeys = Object.keys(scannedDocs).filter(k => k.startsWith("member_") && k.includes("aadhaar"));
+      if (memberKeys.length > 0) {
+        return { source: "scan", key: memberKeys[0], data: scannedDocs[memberKeys[0]], label: "Family member scan" };
+      }
+    }
+
+    return null;
+  };
+
+  // Initialize docs state — pre-fill from vault/scans
+  const [docs, setDocs] = useState(() => {
+    const initial = {};
+    result.scheme.docs.forEach(d => {
+      const existing = findExistingDoc(d);
+      initial[d] = existing ? "uploaded" : null;
+    });
+    return initial;
+  });
+
+  // Track which docs came from vault (to show source indicator)
+  const [docSources] = useState(() => {
+    const sources = {};
+    result.scheme.docs.forEach(d => {
+      const existing = findExistingDoc(d);
+      if (existing) sources[d] = existing;
+    });
+    return sources;
+  });
+
   const [message, setMessage] = useState("");
   const [applied, setApplied] = useState(false);
 
   const ref = generateRef();
+
+  const prefilled = Object.keys(docSources).length;
+  const total = result.scheme.docs.length;
 
   const uploadDoc = (docName) => {
     setDocs(p => ({ ...p, [docName]: "uploaded" }));
@@ -5082,24 +5250,80 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp }) {
       <h2 style={{ fontSize: 18, color: COLORS.navy, marginBottom: 4 }}>{result.scheme.icon} {result.scheme.fullName}</h2>
       <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>For: {result.person.name} ({result.person.relation}) · {result.scheme.benefit}</p>
 
+      {/* Pre-filled summary banner */}
+      {prefilled > 0 && (
+        <div style={{
+          background: `linear-gradient(135deg, ${COLORS.greenPale}, #E8F8F0)`,
+          border: `1.5px solid ${COLORS.green}40`,
+          borderRadius: 12, padding: "12px 16px", marginBottom: 16,
+          display: "flex", alignItems: "center", gap: 12,
+        }}>
+          <div style={{ fontSize: 28 }}>🗂️</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: COLORS.green }}>
+              {prefilled} of {total} document{total !== 1 ? "s" : ""} already available
+            </div>
+            <div style={{ fontSize: 11, color: COLORS.slate, marginTop: 2 }}>
+              Auto-filled from your earlier uploads and scans — no need to re-upload.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 12 }}>📎 Document Locker</div>
 
-      {result.scheme.docs.map(d => (
-        <div key={d} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: docs[d] === "uploaded" ? COLORS.greenPale : COLORS.mist, borderRadius: 10, marginBottom: 8, border: `1px solid ${docs[d] === "uploaded" ? COLORS.green : "#E0E8F0"}40` }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: COLORS.navy }}>{d}</div>
-            <div style={{ fontSize: 11, color: docs[d] === "uploaded" ? COLORS.green : "#A0AABB" }}>{docs[d] === "uploaded" ? "✅ Uploaded" : "⏳ Pending"}</div>
-          </div>
-          {docs[d] !== "uploaded" ? (
-            <div style={{ display: "flex", gap: 8 }}>
-              <Button onClick={() => uploadDoc(d)} variant="secondary" size="sm">📤 Upload</Button>
-              <Button onClick={() => uploadDoc(d)} variant="ghost" size="sm">💬 WhatsApp</Button>
+      {result.scheme.docs.map(d => {
+        const isUploaded = docs[d] === "uploaded";
+        const source = docSources[d];
+        const isFromPrevious = !!source;
+
+        // Source label
+        let sourceLabel = "";
+        if (isFromPrevious) {
+          if (source.source === "vault") sourceLabel = "From document uploads";
+          else if (source.source === "scan") sourceLabel = "From AI scan (verification)";
+        }
+
+        return (
+          <div key={d} style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 14px",
+            background: isUploaded
+              ? (isFromPrevious ? `linear-gradient(135deg, ${COLORS.greenPale}, #EAF8F0)` : COLORS.greenPale)
+              : COLORS.mist,
+            borderRadius: 10, marginBottom: 8,
+            border: `1px solid ${isUploaded ? COLORS.green : "#E0E8F0"}40`,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: COLORS.navy }}>{d}</div>
+              {isUploaded && isFromPrevious ? (
+                <div style={{ fontSize: 11, color: COLORS.green, display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                  <span>✅ Available</span>
+                  <span style={{
+                    background: COLORS.green + "18", color: COLORS.green,
+                    fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 8,
+                    whiteSpace: "nowrap",
+                  }}>
+                    {sourceLabel}
+                  </span>
+                </div>
+              ) : isUploaded ? (
+                <div style={{ fontSize: 11, color: COLORS.green }}>✅ Uploaded</div>
+              ) : (
+                <div style={{ fontSize: 11, color: "#A0AABB" }}>⏳ Pending</div>
+              )}
             </div>
-          ) : (
-            <span style={{ color: COLORS.green, fontSize: 20 }}>✅</span>
-          )}
-        </div>
-      ))}
+            {isUploaded ? (
+              <span style={{ color: COLORS.green, fontSize: 20 }}>✅</span>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button onClick={() => uploadDoc(d)} variant="secondary" size="sm">📤 Upload</Button>
+                <Button onClick={() => uploadDoc(d)} variant="ghost" size="sm">💬 WhatsApp</Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       <div style={{ marginTop: 6, marginBottom: 20 }}>
         <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10 }}>📋 Missing Document? Create it:</div>
@@ -6209,6 +6433,7 @@ export default function JanSetuApp() {
               {screen === "household" && (
                 <HouseholdScreen
                   worker={verifiedWorker}
+                  existingHousehold={household}
                   onComplete={handleHousehold}
                   onBack={() => setScreen("intent")}
                 />
@@ -6260,6 +6485,8 @@ export default function JanSetuApp() {
                   lang={lang}
                   onBack={() => setScreen("schemes")}
                   onSubmitApp={handleSubmitApp}
+                  docVault={docVault}
+                  household={household}
                 />
               )}
             </>
