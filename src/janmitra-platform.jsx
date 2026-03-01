@@ -4793,10 +4793,10 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, marginBottom: 10, letterSpacing: 0.5 }}>✍️ FILL MANUALLY — agent asks worker</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
             <Input label="Gender" value={W.gender} onChange={v => setW("gender", v)} options={[{value:"male",label:"Male"},{value:"female",label:"Female"},{value:"other",label:"Other"}]} />
-            <Input label="Caste Category" value={W.caste} onChange={v => setW("caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
+
             <Input label="Marital Status" value={W.maritalStatus} onChange={v => setW("maritalStatus", v)} options={["married","unmarried","widow"]} />
-            <Input label="Annual Household Income (₹)" value={W.annualIncome} onChange={v => setW("annualIncome", v)} placeholder="e.g. 120000" type="number" />
-            <Input label="Disability %" value={W.disability} onChange={v => setW("disability", parseInt(v)||0)} type="number" placeholder="0 if none" />
+
+
             <Input label="Wife's Name" value={W.wifeName || ""} onChange={v => setW("wifeName", v)} placeholder="If married" />
           </div>
 
@@ -4964,56 +4964,64 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
 
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
 function QuestionnaireScreen({ household, onComplete, onBack }) {
-  const [monthlyIncome, setMonthlyIncome] = useState(household?.worker?.annualIncome ? String(Math.round(parseInt(household.worker.annualIncome) / 12)) : "");
-  const [annualIncome, setAnnualIncome] = useState(household?.worker?.annualIncome || "");
+  const worker = household?.worker || {};
+  const members = household?.members || [];
+  const [caste, setCaste] = useState(worker.caste || "");
+  const [disability, setDisability] = useState(worker.disability || 0);
+  const [monthlyIncome, setMonthlyIncome] = useState(worker.annualIncome ? String(Math.round(parseInt(worker.annualIncome) / 12)) : "");
+  const [annualIncome, setAnnualIncome] = useState(worker.annualIncome || "");
   const [rationCard, setRationCard] = useState("");
-  const [caste] = useState(household?.worker?.caste || "");
-  const [disability] = useState(household?.worker?.disability || 0);
   const [district] = useState("Paschim Bardhaman");
-
-  const handleMonthlyChange = (v) => {
-    setMonthlyIncome(v);
-    if (v) setAnnualIncome(String(parseInt(v) * 12 || 0));
-    else setAnnualIncome("");
-  };
-  const handleAnnualChange = (v) => {
-    setAnnualIncome(v);
-    if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0));
-    else setMonthlyIncome("");
-  };
-
+  const [memberData, setMemberData] = useState(members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
+  const handleMonthlyChange = (v) => { setMonthlyIncome(v); if (v) setAnnualIncome(String(parseInt(v) * 12 || 0)); else setAnnualIncome(""); };
+  const handleAnnualChange = (v) => { setAnnualIncome(v); if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0)); else setMonthlyIncome(""); };
+  const updateMember = (i, key, val) => setMemberData(prev => prev.map((m, j) => j === i ? { ...m, [key]: val } : m));
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Household" />}
-      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📋 Household Details</h2>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>A few more details to find all eligible schemes</p>
+      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>Eligibility Questions</h2>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>Fill details for worker and each family member</p>
       <Card style={{ background: "#EFF8F3", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 7 }}>📍 Location (Pre-filled)</div>
-        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal · {district}</div>
+        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>Location (Pre-filled)</div>
+        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal - {district}</div>
       </Card>
-
-      {(caste || disability > 0) && (
-        <Card style={{ background: "#F0FAF4", marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: COLORS.green, fontWeight: 700 }}>
-            ✅ From Hold: {caste ? `Caste — ${caste}` : ""}{caste && disability > 0 ? " · " : ""}{disability > 0 ? `Disability — ${disability}%` : ""}
+      <Card style={{ marginBottom: 16, background: "#F9F5FF" }}>
+        <div style={{ fontWeight: 800, color: COLORS.navy, marginBottom: 12, fontSize: 15 }}>Worker: {worker.name || "Primary Worker"}</div>
+        <Input label="Caste Category" value={caste} onChange={setCaste} options={["General","SC","ST","OBC-A","OBC-B"]} required />
+        <Input label="Disability %" value={disability} onChange={v => setDisability(parseInt(v)||0)} type="number" placeholder="0 if none" />
+        <Input label="Household Monthly Income" value={monthlyIncome} onChange={handleMonthlyChange} type="number" placeholder="e.g. 8000" required />
+        <Input label="Household Annual Income" value={annualIncome} onChange={handleAnnualChange} type="number" placeholder="e.g. 96000" required />
+        <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes - PHH","Yes - AAY","Yes - SPHH","No"]} required />
+      </Card>
+      {memberData.map((md, i) => (
+        <Card key={i} style={{ marginBottom: 12, border: "1.5px solid #E8EDF3" }}>
+          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10, fontSize: 14 }}>
+            {members[i]?.name || "Member"} <span style={{ color: "#7A8A9A", fontWeight: 400, fontSize: 12 }}>({members[i]?.relation}, Age {members[i]?.age})</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+            <Input label="Caste" value={md.caste} onChange={v => updateMember(i, "caste", v)} options={["General","SC","ST","OBC-A","OBC-B"]} />
+            <Input label="Disability %" value={md.disability} onChange={v => updateMember(i, "disability", parseInt(v)||0)} type="number" placeholder="0" />
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
+            {[["student", "Student"], ["bankAccount", "Has Bank Account"], ["bankInOwnName", "Account in own name"], ["pregnant", "Pregnant"], ["firstChild", "First child (PMMVY)"]].map(([k, l]) => (
+              <label key={k} style={{ fontSize: 12, color: COLORS.slate, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!md[k]} onChange={e => updateMember(i, k, e.target.checked)} /> {l}
+              </label>
+            ))}
           </div>
         </Card>
+      ))}
+      {members.length === 0 && (
+        <div style={{ background: "#F8FAFD", borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 13, color: "#7A8A9A", textAlign: "center" }}>
+          No family members added. Go back to add members if needed.
+        </div>
       )}
-
-      <Input label="Household Monthly Income (₹)" value={monthlyIncome} onChange={handleMonthlyChange} type="number" placeholder="e.g. 8000" required />
-      <Input label="Household Annual Income (₹)" value={annualIncome} onChange={handleAnnualChange} type="number" placeholder="e.g. 96000" required />
-      <Input label="Ration Card" value={rationCard} onChange={setRationCard} options={["Yes – PHH","Yes – AAY","Yes – SPHH","No"]} required />
-
-      <div style={{ background: COLORS.amberLight, border: `1px solid ${COLORS.gold}40`, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13, color: COLORS.amber }}>
-        ℹ️ Worker & family details from thl be used for eligibility.
-      </div>
-
       <Button
-        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability })}
+        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability, memberData })}
         variant="primary" size="lg"
-        disabled={!monthlyIncome || !annualIncome || !rationCard}
+        disabled={!monthlyIncome || !annualIncome || !rationCard || !caste}
       >
-        Find Eligible Schemes →
+        Find Eligible Schemes
       </Button>
     </div>
   );
