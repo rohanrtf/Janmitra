@@ -4285,20 +4285,17 @@ function VerifyScreen({ onVerified }) {
   const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [aadhaarLast4, setAadhaarLast4] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState("phone"); // phone | otp_sent | no_link | no_aadhaar
+  const [step, setStep] = useState("phone");
   const [lang, setLang] = useState("en");
   const [resendTimer, setResendTimer] = useState(0);
   const [resending, setResending] = useState(false);
 
-  // Countdown timer for resend OTP
   useEffect(() => {
     if (resendTimer <= 0) return;
     const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
     return () => clearTimeout(t);
   }, [resendTimer]);
-  
 
-  // Extract last 4 whenever full number typed
   const handleAadhaarChange = (val) => {
     const digits = val.replace(/\D/g, "").slice(0, 12);
     setAadhaarNumber(digits);
@@ -4379,7 +4376,27 @@ function VerifyScreen({ onVerified }) {
           {!canSendOtp && (
             <div style={{ fontSize: 11, color: "#7A8A9A", marginTop: 8, textAlign: "center" }}>
               {phone.length < 10 ? "Enter 10-digit mobile · " : ""}
-              {/* ── STEP 2a: OTP sent ── */}
+              {aadhaarNumber.length < 12 ? "Enter 12-digit Aadhaar number" : ""}
+            </div>
+          )}
+
+          <div style={{ marginTop: 20, borderTop: "1px solid #E8EDF3", paddingTop: 20 }}>
+            <div style={{ fontSize: 12, color: "#7A8A9A", textAlign: "center", marginBottom: 12 }}>
+              Is there a problem with the Aadhaar?
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setStep("no_link")} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${COLORS.amber}`, background: "#FEF3E2", color: COLORS.amber, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
+                📵 Mobile not linked<br/><span style={{ fontWeight: 400, fontSize: 11 }}>to Aadhaar</span>
+              </button>
+              <button onClick={() => setStep("no_aadhaar")} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${COLORS.red}`, background: "#FADBD8", color: COLORS.red, fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}>
+                ❌ No Aadhaar<br/><span style={{ fontWeight: 400, fontSize: 11 }}>card yet</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── STEP 2a: OTP sent ── */}
       {step === "otp_sent" && (
         <>
           <div style={{ background: COLORS.greenPale, border: `1px solid ${COLORS.green}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: COLORS.green }}>
@@ -4455,13 +4472,6 @@ function VerifyScreen({ onVerified }) {
             variant="primary" size="lg" disabled={otp.length < 4}>
             ✅ Verify & Continue
           </Button>
-          <button onClick={() => setStep("phone")} style={{ background: "none", border: "none", color: COLORS.saffron, fontSize: 13, cursor: "pointer", marginTop: 14, display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
-            ← Back
-          </button>
-        </>
-      )}
-        
-          
           <button onClick={() => setStep("phone")} style={{ background: "none", border: "none", color: COLORS.saffron, fontSize: 13, cursor: "pointer", marginTop: 14, display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
             ← Back
           </button>
@@ -4549,7 +4559,14 @@ function VerifyScreen({ onVerified }) {
     </div>
   );
 }
+```
 
+4. **Save** (Cmd+S)
+5. **Push:**
+```
+git add src/janmitra-platform.jsx
+git commit -m "Fix VerifyScreen - clean Resend OTP"
+git push
 // ─── SCREEN 2: HOUSEHOLD BUILDER ──────────────────────────────────────────────
 // Member doc upload component (reused for each family member)
 function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
