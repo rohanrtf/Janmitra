@@ -5036,18 +5036,25 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
   const [filter, setFilter] = useState("All");
   const categories = ["All", "Central", "West Bengal"];
   const filtered = filter === "All" ? results : results.filter(r => r.scheme.category === filter);
-
   const diffColor = d => d === "Easy" ? COLORS.green : d === "Medium" ? COLORS.amber : COLORS.red;
+
+  // Group by person
+  const grouped = {};
+  filtered.forEach(r => {
+    const key = r.person.name + "|" + r.person.relation;
+    if (!grouped[key]) grouped[key] = { person: r.person, schemes: [] };
+    grouped[key].schemes.push(r);
+  });
+  const personGroups = Object.values(grouped);
 
   return (
     <div>
       {onBack && <BackButton onClick={onBack} label="Back to Questions" />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>🎯 Eligible Schemes</h2>
-        <Badge label={`${results.length} found`} color={COLORS.green} />
+        <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>Eligible Schemes</h2>
+        <Badge label={results.length + " found"} color={COLORS.green} />
       </div>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Sorted by easiest first, highest benefit within same difficulty</p>
-
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Grouped by family member, sorted by easiest first</p>
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {categories.map(c => (
           <button key={c} onClick={() => setFilter(c)} style={{
@@ -5056,44 +5063,52 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
           }}>{c}</button>
         ))}
       </div>
-
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>No schemes found for this filter.</div>
       )}
-
-      {filtered.map((r, i) => (
-        <Card key={i} style={{ marginBottom: 12, borderLeft: `4px solid ${COLORS.saffron}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
-                  <div style={{ fontSize: 11, color: "#7A8A9A" }}>For: {r.person.name} ({r.person.relation})</div>
-                </div>
-              </div>
-              <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
-                {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <Badge label={r.scheme.benefit} color={COLORS.green} />
-                <Badge label={r.scheme.category} color={COLORS.navy} />
-                <Badge label={`Difficulty: ${r.scheme.difficultyLabel}`} color={diffColor(r.scheme.difficultyLabel)} />
-              </div>
-              {r.reasons && r.reasons.length > 0 && (
-                <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
-                  ✅ Why eligible: {r.reasons.join(" · ")}
-                </div>
-              )}
-              <div style={{ fontSize: 12, color: "#7A8A9A" }}>
-                📎 Docs needed: {r.scheme.docs.join(", ")}
-              </div>
+      {personGroups.map((group, gi) => (
+        <div key={gi} style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "10px 14px", background: COLORS.navy, borderRadius: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: COLORS.saffron, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16 }}>
+              {group.person.name?.charAt(0) || "?"}
             </div>
-            <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
-              Apply →
-            </Button>
+            <div>
+              <div style={{ fontWeight: 800, color: "#fff", fontSize: 15 }}>{group.person.name}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{group.person.relation} | {group.schemes.length} scheme{group.schemes.length !== 1 ? "s" : ""} eligible</div>
+            </div>
           </div>
-        </Card>
+          {group.schemes.map((r, i) => (
+            <Card key={i} style={{ marginBottom: 10, borderLeft: "4px solid " + COLORS.saffron }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
+                    <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 8 }}>
+                    {lang === "bn" ? r.scheme.description_bn : lang === "hi" ? r.scheme.description_hi : r.scheme.description_en}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                    <Badge label={r.scheme.benefit} color={COLORS.green} />
+                    <Badge label={r.scheme.category} color={COLORS.navy} />
+                    <Badge label={"Difficulty: " + r.scheme.difficultyLabel} color={diffColor(r.scheme.difficultyLabel)} />
+                  </div>
+                  {r.reasons && r.reasons.length > 0 && (
+                    <div style={{ background: COLORS.greenPale, borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 11, color: COLORS.green }}>
+                      Why eligible: {r.reasons.join(" | ")}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, color: "#7A8A9A" }}>
+                    Docs needed: {r.scheme.docs.join(", ")}
+                  </div>
+                </div>
+                <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
+                  Apply
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
       ))}
     </div>
   );
