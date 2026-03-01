@@ -1267,251 +1267,6 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
         </div>
       `
     },
-
-    // ── PRE-FILLED SCHEME APPLICATION FORMS ────────────────────────────────────
-    pmjjby_form: {
-      title: "PMJJBY — Consent-cum-Declaration Form (Pre-filled)",
-      content: `
-        <div class="letterhead">
-          <div class="logo">PRADHAN MANTRI JEEVAN JYOTI BIMA YOJANA (PMJJBY)</div>
-          <div class="sub">Consent-cum-Declaration Form · Pre-filled by Jan Setu</div>
-          <div class="divider"></div>
-        </div>
-        <p class="ref">Date: ${today} &nbsp;&nbsp;|&nbsp;&nbsp; Bank: ${worker?.bankName || "[Bank Name & Branch]"}</p>
-
-        <h3>Part A — Subscriber Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Full Name (as per Aadhaar)</td><td class="cs-value"><strong>${worker?.name || person.name || "[Name]"}</strong></td></tr>
-          <tr><td class="cs-label">Date of Birth</td><td class="cs-value"><strong>${person.dob || worker?.dob || "[DD/MM/YYYY]"}</strong></td></tr>
-          <tr><td class="cs-label">Age</td><td class="cs-value"><strong>${person.age || worker?.age || "[Age]"} years</strong> (must be 18–50)</td></tr>
-          <tr><td class="cs-label">Aadhaar Number</td><td class="cs-value">XXXX-XXXX-<strong>${person.aadhaarLast4 || worker?.aadhaarLast4 || "XXXX"}</strong> (carry original)</td></tr>
-          <tr><td class="cs-label">Mobile Number</td><td class="cs-value"><strong>${person.phone || worker?.phone || "[Mobile]"}</strong></td></tr>
-          <tr><td class="cs-label">Savings Bank A/C No.</td><td class="cs-value"><strong>${worker?.bankAccountNo || "[Account Number]"}</strong></td></tr>
-          <tr><td class="cs-label">Bank Name & Branch</td><td class="cs-value"><strong>${worker?.bankName || "[Bank Name]"}</strong></td></tr>
-          <tr><td class="cs-label">IFSC Code</td><td class="cs-value"><strong>${worker?.ifsc || "[IFSC Code]"}</strong></td></tr>
-          <tr><td class="cs-label">Address</td><td class="cs-value">${workerAddr}</td></tr>
-        </table>
-
-        <h3>Part B — Nominee Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Nominee Name</td><td class="cs-value"><strong>${person.nomineeName || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee Relationship</td><td class="cs-value"><strong>${person.nomineeRelation || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee Age</td><td class="cs-value"><strong>${person.nomineeAge || "________"}</strong></td></tr>
-        </table>
-
-        <h3>Part C — Consent & Authorization</h3>
-        <p>I, <strong>${worker?.name || person.name || "[Name]"}</strong>, hereby give my consent to become a member of the Pradhan Mantri Jeevan Jyoti Bima Yojana (PMJJBY). I authorize my bank to auto-debit <strong>₹436/-</strong> (Rupees Four Hundred Thirty-Six only) from my savings account towards annual premium.</p>
-        <p>I hereby declare that the above statements are true in all respects. I have read and understood the Scheme rules. I am aware that risk will not be covered during the first 30 days (lien period).</p>
-        <p>I authorize the Bank to convey my personal details to the Insurance Company for admission into the group insurance scheme.</p>
-
-        <div class="signature" style="display:flex;justify-content:space-between;margin-top:40px">
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>${worker?.name || person.name || "[Subscriber Name]"}</p>
-            <p style="font-size:11px;color:#7A8A9A">Signature / Thumb impression of Subscriber</p>
-          </div>
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>Authorised Bank Official</p>
-            <p style="font-size:11px;color:#7A8A9A">Stamp & Signature</p>
-          </div>
-        </div>
-
-        <div class="cs-note" style="margin-top:20px">
-          <strong>📎 Carry with this form:</strong> Original Aadhaar card · Bank passbook · This pre-filled form (2 copies)<br>
-          <strong>💬 What to say at counter:</strong> "PMJJBY enrollment form hai, details bhar ke laaye hain" / "PMJJBY ফর্ম পূরণ করে এনেছি"
-        </div>
-      `
-    },
-
-    pmsby_form: {
-      title: "PMSBY — Consent-cum-Declaration Form (Pre-filled)",
-      content: `
-        <div class="letterhead">
-          <div class="logo">PRADHAN MANTRI SURAKSHA BIMA YOJANA (PMSBY)</div>
-          <div class="sub">Consent-cum-Declaration Form · Pre-filled by Jan Setu</div>
-          <div class="divider"></div>
-        </div>
-        <p class="ref">Date: ${today} &nbsp;&nbsp;|&nbsp;&nbsp; Bank: ${worker?.bankName || "[Bank Name & Branch]"}</p>
-
-        <h3>Part A — Subscriber Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Full Name (as per Aadhaar)</td><td class="cs-value"><strong>${worker?.name || person.name || "[Name]"}</strong></td></tr>
-          <tr><td class="cs-label">Date of Birth</td><td class="cs-value"><strong>${person.dob || worker?.dob || "[DD/MM/YYYY]"}</strong></td></tr>
-          <tr><td class="cs-label">Age</td><td class="cs-value"><strong>${person.age || worker?.age || "[Age]"} years</strong> (must be 18–70)</td></tr>
-          <tr><td class="cs-label">Aadhaar Number</td><td class="cs-value">XXXX-XXXX-<strong>${person.aadhaarLast4 || worker?.aadhaarLast4 || "XXXX"}</strong></td></tr>
-          <tr><td class="cs-label">Mobile Number</td><td class="cs-value"><strong>${person.phone || worker?.phone || "[Mobile]"}</strong></td></tr>
-          <tr><td class="cs-label">Savings Bank A/C No.</td><td class="cs-value"><strong>${worker?.bankAccountNo || "[Account Number]"}</strong></td></tr>
-          <tr><td class="cs-label">Bank Name & Branch</td><td class="cs-value"><strong>${worker?.bankName || "[Bank Name]"}</strong></td></tr>
-          <tr><td class="cs-label">IFSC Code</td><td class="cs-value"><strong>${worker?.ifsc || "[IFSC Code]"}</strong></td></tr>
-        </table>
-
-        <h3>Part B — Nominee Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Nominee Name</td><td class="cs-value"><strong>${person.nomineeName || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee Relationship</td><td class="cs-value"><strong>${person.nomineeRelation || "_______________________________"}</strong></td></tr>
-        </table>
-
-        <h3>Part C — Consent & Authorization</h3>
-        <p>I, <strong>${worker?.name || person.name || "[Name]"}</strong>, hereby give my consent to join PMSBY. I authorize my bank to auto-debit <strong>₹20/-</strong> (Rupees Twenty only) annually from my savings account towards accident insurance premium of ₹2,00,000.</p>
-        <p>I have read and understood the Scheme rules. I declare the above statements are true in all respects.</p>
-
-        <div class="signature" style="display:flex;justify-content:space-between;margin-top:40px">
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>${worker?.name || person.name || "[Subscriber Name]"}</p>
-            <p style="font-size:11px;color:#7A8A9A">Signature / Thumb impression</p>
-          </div>
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>Authorised Bank Official</p>
-            <p style="font-size:11px;color:#7A8A9A">Stamp & Signature</p>
-          </div>
-        </div>
-
-        <div class="cs-note" style="margin-top:20px">
-          <strong>💡 Tip:</strong> Enroll PMJJBY + PMSBY together — same bank visit. Only ₹456 total/year for ₹4 lakh combined cover.<br>
-          <strong>📎 Carry:</strong> Original Aadhaar · Passbook · This form (2 copies)
-        </div>
-      `
-    },
-
-    apy_form: {
-      title: "APY — Subscriber Registration Form (Pre-filled)",
-      content: `
-        <div class="letterhead">
-          <div class="logo">ATAL PENSION YOJANA (APY)</div>
-          <div class="sub">Subscriber Registration Form · Pre-filled by Jan Setu</div>
-          <div class="divider"></div>
-        </div>
-        <p class="ref">Date: ${today} &nbsp;&nbsp;|&nbsp;&nbsp; Bank: ${worker?.bankName || "[Bank Name & Branch]"}</p>
-
-        <h3>Part A — Subscriber Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Full Name (as per Aadhaar)</td><td class="cs-value"><strong>${worker?.name || person.name || "[Name]"}</strong></td></tr>
-          <tr><td class="cs-label">Date of Birth</td><td class="cs-value"><strong>${person.dob || worker?.dob || "[DD/MM/YYYY]"}</strong> (must be 18–40 years)</td></tr>
-          <tr><td class="cs-label">Age</td><td class="cs-value"><strong>${person.age || worker?.age || "[Age]"} years</strong></td></tr>
-          <tr><td class="cs-label">Gender</td><td class="cs-value"><strong>${(person.gender || worker?.gender || "Male").charAt(0).toUpperCase() + (person.gender || worker?.gender || "male").slice(1)}</strong></td></tr>
-          <tr><td class="cs-label">Aadhaar Number</td><td class="cs-value">XXXX-XXXX-<strong>${person.aadhaarLast4 || worker?.aadhaarLast4 || "XXXX"}</strong></td></tr>
-          <tr><td class="cs-label">Mobile Number</td><td class="cs-value"><strong>${person.phone || worker?.phone || "[Mobile]"}</strong></td></tr>
-          <tr><td class="cs-label">Savings Bank A/C No.</td><td class="cs-value"><strong>${worker?.bankAccountNo || "[Account Number]"}</strong></td></tr>
-          <tr><td class="cs-label">Bank Name & Branch</td><td class="cs-value"><strong>${worker?.bankName || "[Bank Name]"}</strong></td></tr>
-          <tr><td class="cs-label">IFSC Code</td><td class="cs-value"><strong>${worker?.ifsc || "[IFSC Code]"}</strong></td></tr>
-          <tr><td class="cs-label">Address</td><td class="cs-value">${workerAddr}</td></tr>
-        </table>
-
-        <h3>Part B — Pension Slab Selection</h3>
-        <div style="border:2px solid #E8690B;border-radius:8px;padding:14px;margin-bottom:16px">
-          <p style="font-weight:700;color:#0D2240;margin:0 0 10px">Worker must choose ONE pension slab (tick one):</p>
-          <table class="cs-table" style="font-size:13px">
-            <tr style="background:#EAF0FA"><td style="font-weight:700">Monthly Pension at 60</td><td style="font-weight:700">Monthly Contribution (Age ${person.age || worker?.age || "XX"})</td><td style="font-weight:700">Tick</td></tr>
-            <tr><td>₹1,000/month</td><td>Depends on age — bank will calculate</td><td>☐</td></tr>
-            <tr><td>₹2,000/month</td><td>Depends on age — bank will calculate</td><td>☐</td></tr>
-            <tr><td>₹3,000/month</td><td>Depends on age — bank will calculate</td><td>☐</td></tr>
-            <tr><td>₹4,000/month</td><td>Depends on age — bank will calculate</td><td>☐</td></tr>
-            <tr><td>₹5,000/month</td><td>Depends on age — bank will calculate</td><td>☐</td></tr>
-          </table>
-        </div>
-
-        <h3>Part C — Nominee / Spouse Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Spouse Name</td><td class="cs-value"><strong>${person.spouseName || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee Name</td><td class="cs-value"><strong>${person.nomineeName || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee Relationship</td><td class="cs-value"><strong>${person.nomineeRelation || "_______________________________"}</strong></td></tr>
-          <tr><td class="cs-label">Nominee DOB</td><td class="cs-value"><strong>${person.nomineeDob || "____ / ____ / ________"}</strong></td></tr>
-        </table>
-
-        <p>I authorize my bank to auto-debit the monthly contribution towards APY. I declare the above statements are true.</p>
-
-        <div class="signature" style="display:flex;justify-content:space-between;margin-top:40px">
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>${worker?.name || person.name || "[Subscriber Name]"}</p>
-            <p style="font-size:11px;color:#7A8A9A">Signature / Thumb impression</p>
-          </div>
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>Authorised Bank Official</p>
-            <p style="font-size:11px;color:#7A8A9A">Stamp & Signature</p>
-          </div>
-        </div>
-
-        <div class="cs-note" style="margin-top:20px">
-          <strong>📎 Carry:</strong> Original Aadhaar · Passbook · This form (2 copies)<br>
-          <strong>💡 Tip:</strong> Bank will issue PRAN (Permanent Retirement Account Number) — note it as Ack Number.
-        </div>
-      `
-    },
-
-    wb_pension_form: {
-      title: "WB Social Security Pension — Application Form (Pre-filled)",
-      content: `
-        <div class="letterhead">
-          <div class="logo">WEST BENGAL SOCIAL SECURITY PENSION APPLICATION</div>
-          <div class="sub">Old Age / Widow / Disability / Tapasili Bandhu / Jai Johar · Pre-filled by Jan Setu</div>
-          <div class="divider"></div>
-        </div>
-        <p class="ref">Date: ${today} &nbsp;&nbsp;|&nbsp;&nbsp; BDO: Jamuria Block, Paschim Bardhaman</p>
-
-        <h3>Part A — Applicant Details</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Full Name</td><td class="cs-value"><strong>${person.name || "[Name]"}</strong></td></tr>
-          <tr><td class="cs-label">Date of Birth</td><td class="cs-value"><strong>${person.dob || "[DD/MM/YYYY]"}</strong></td></tr>
-          <tr><td class="cs-label">Age</td><td class="cs-value"><strong>${person.age || "[Age]"} years</strong></td></tr>
-          <tr><td class="cs-label">Gender</td><td class="cs-value"><strong>${(person.gender || "Not specified").charAt(0).toUpperCase() + (person.gender || "not specified").slice(1)}</strong></td></tr>
-          <tr><td class="cs-label">Aadhaar Number</td><td class="cs-value">XXXX-XXXX-<strong>${person.aadhaarLast4 || worker?.aadhaarLast4 || "XXXX"}</strong></td></tr>
-          <tr><td class="cs-label">Mobile Number</td><td class="cs-value"><strong>${person.phone || worker?.phone || "[Mobile]"}</strong></td></tr>
-          <tr><td class="cs-label">Caste Category</td><td class="cs-value"><strong>${person.caste || worker?.caste || "[General/SC/ST/OBC]"}</strong></td></tr>
-          <tr><td class="cs-label">Marital Status</td><td class="cs-value"><strong>${(person.maritalStatus || "").charAt(0).toUpperCase() + (person.maritalStatus || "").slice(1) || "[Status]"}</strong></td></tr>
-          <tr><td class="cs-label">Address</td><td class="cs-value">${workerAddr}</td></tr>
-        </table>
-
-        <h3>Part B — Bank Details (for Direct Benefit Transfer)</h3>
-        <table class="cs-table">
-          <tr><td class="cs-label">Account Holder Name</td><td class="cs-value"><strong>${person.name || "[Name as per bank]"}</strong></td></tr>
-          <tr><td class="cs-label">Bank A/C Number</td><td class="cs-value"><strong>${person.bankAccountNo || worker?.bankAccountNo || "[Account Number]"}</strong></td></tr>
-          <tr><td class="cs-label">Bank Name & Branch</td><td class="cs-value"><strong>${worker?.bankName || "[Bank Name]"}</strong></td></tr>
-          <tr><td class="cs-label">IFSC Code</td><td class="cs-value"><strong>${worker?.ifsc || "[IFSC Code]"}</strong></td></tr>
-        </table>
-
-        <h3>Part C — Pension Type (tick applicable)</h3>
-        <div style="border:2px solid #0D2240;border-radius:8px;padding:14px;margin-bottom:16px">
-          <label style="display:block;padding:6px 0;font-size:14px"><input type="checkbox"> Old Age Pension (age ≥ 60 — ₹1,000/month)</label>
-          <label style="display:block;padding:6px 0;font-size:14px"><input type="checkbox"> Widow Pension (₹1,000/month — annual income ≤ ₹72,000)</label>
-          <label style="display:block;padding:6px 0;font-size:14px"><input type="checkbox"> Disability Pension / Manabik (≥40% disability — ₹1,000/month)</label>
-          <label style="display:block;padding:6px 0;font-size:14px"><input type="checkbox"> Tapasili Bandhu (SC seniors ≥ 60)</label>
-          <label style="display:block;padding:6px 0;font-size:14px"><input type="checkbox"> Jai Johar (ST seniors ≥ 60)</label>
-        </div>
-
-        <p>I declare that the above statements are true. I am not receiving any other pension from the Central or State Government for the same category.</p>
-
-        <div class="signature" style="display:flex;justify-content:space-between;margin-top:40px">
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>${person.name || "[Applicant Name]"}</p>
-            <p style="font-size:11px;color:#7A8A9A">Signature / Thumb impression</p>
-          </div>
-          <div style="text-align:center;width:45%">
-            <p>&nbsp;</p><p>&nbsp;</p>
-            <p><strong>________________________</strong></p>
-            <p>${welfareOfficer}</p>
-            <p style="font-size:11px;color:#7A8A9A">Welfare Officer / Jan Setu Pratinidhi</p>
-          </div>
-        </div>
-
-        <div class="cs-note" style="margin-top:20px">
-          <strong>📎 Carry to BDO office:</strong> This form (2 copies) · Original Aadhaar · Age proof · Bank passbook · Caste cert (if SC/ST) · Income cert (if widow) · Disability cert (if applicable)<br>
-          <strong>📍 Submit at:</strong> BDO Office, Jamuria Block, Paschim Bardhaman OR apply online at edistrict.wb.gov.in
-        </div>
-      `
-    },
   };
 
   return docs[type] || { title: "Document", content: "<p>Document template not found.</p>" };
@@ -5595,7 +5350,7 @@ const SUBMISSION_CFG = {
     mode: "bank_branch", modeIcon: "🏦", modeLabel: "Bank Branch",
     portalUrl: null, needsOtp: false,
     tip: "Bundle PMJJBY + PMSBY together — one bank visit covers both. Saves a trip.",
-    instructions: ["Print the pre-filled PMJJBY form from Jan Setu (click 'Print Form' below)","Go to worker's bank branch with the printed form + original Aadhaar + passbook","Hand the pre-filled form to counter staff — they verify and process it","Bank auto-debits ₹436 annually; collect the insurance certificate","Enter the certificate/policy number as the Ack Number below"],
+    instructions: ["Go to worker's bank branch with the filled docket + original Aadhaar","Ask counter staff for 'PMJJBY enrollment form' — they will provide it","Bank auto-debits ₹436 annually; collect the insurance certificate","Enter the certificate/policy number as the Ack Number below"],
     fields: [
       { key:"workerName", label:"Full Name (as per Aadhaar)", src:"person.name" },
       { key:"dob",        label:"Date of Birth",              src:"", ph:"DD/MM/YYYY" },
@@ -5612,7 +5367,7 @@ const SUBMISSION_CFG = {
     mode: "bank_branch", modeIcon: "🏦", modeLabel: "Bank Branch",
     portalUrl: null, needsOtp: false,
     tip: "Only ₹20/year premium. Do this same visit as PMJJBY.",
-    instructions: ["Print the pre-filled PMSBY form from Jan Setu (click 'Print Form' below)","Submit the printed form at the same bank counter — can be done with PMJJBY in one visit","Premium of ₹20 auto-debited annually from savings account","Collect confirmation slip — enter slip number as Ack Number"],
+    instructions: ["Ask for 'PMSBY enrollment form' at the same bank counter","Premium of ₹20 auto-debited annually from savings account","Collect confirmation slip — enter slip number as Ack Number"],
     fields: [
       { key:"workerName", label:"Full Name",             src:"person.name" },
       { key:"dob",        label:"Date of Birth",         src:"", ph:"DD/MM/YYYY" },
@@ -5629,7 +5384,7 @@ const SUBMISSION_CFG = {
     portalUrl: "https://enps.nsdl.com/eNPS/NationalPensionSystem.html",
     portalLabel: "Open eNPS Portal →", needsOtp: false,
     tip: "Worker must choose pension slab: ₹1,000 / ₹2,000 / ₹3,000 / ₹4,000 / ₹5,000/month. Show them the contribution table before deciding.",
-    instructions: ["Print the pre-filled APY registration form from Jan Setu (click 'Print Form' below)","Worker must choose pension slab before visiting bank — show them the contribution table on the form","Go to bank branch with printed form + Aadhaar + passbook","Bank verifies and processes — monthly contribution auto-calculated by bank based on age + slab","Collect PRAN (Permanent Retirement Account Number) as the Ack Number"],
+    instructions: ["At bank: fill APY subscriber registration form, attach Aadhaar + bank passbook","Worker must be 18–40 years old — verify age before applying","Monthly contribution is auto-calculated by bank based on age + chosen pension slab","Collect PRAN (Permanent Retirement Account Number) as the Ack Number"],
     fields: [
       { key:"workerName",   label:"Full Name",                  src:"person.name" },
       { key:"dob",          label:"Date of Birth",              src:"", ph:"DD/MM/YYYY" },
@@ -5728,7 +5483,7 @@ const SUBMISSION_CFG = {
     portalUrl: "https://edistrict.wb.gov.in",
     portalLabel: "Open e-District WB →", needsOtp: false,
     tip: "Applicant must be 60+ years. Both online (e-District) and offline (BDO office) accepted.",
-    instructions: ["Print the pre-filled WB Pension application from Jan Setu (click 'Print Form' below)","Online: e-District portal → Social Welfare → Old Age Pension","Offline: Submit printed form at BDO office, Jamuria Block with original documents","Application Number issued — enter as Ack Number","Monthly ₹1,000 credited directly to account after approval"],
+    instructions: ["Online: e-District portal → Social Welfare → Old Age Pension","Offline: BDO office, Jamuria Block with filled docket + original documents","Application Number issued — enter as Ack Number","Monthly ₹1,000 credited directly to account after approval"],
     fields: [
       { key:"applicantName", label:"Applicant Full Name",           src:"person.name" },
       { key:"dob",           label:"Date of Birth (must show ≥60)", src:"", ph:"DD/MM/YYYY" },
@@ -5971,7 +5726,7 @@ function SubmissionConsole({ app, onBack, onSubmitted }) {
         </div>
       )}
 
-      {/* Portal + Docket + Pre-filled Form buttons */}
+      {/* Portal + Docket buttons */}
       <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
         {cfg.portalUrl && (
           <button onClick={() => window.open(cfg.portalUrl,"_blank")} style={{ background:COLORS.navy, color:"#fff", border:"none", borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
@@ -5981,24 +5736,6 @@ function SubmissionConsole({ app, onBack, onSubmitted }) {
         <button onClick={() => generateSubmissionDocket(app, formData, { welfareOfficer:"Welfare Officer / Jan Setu Pratinidhi" })} style={{ background:COLORS.amberLight, color:COLORS.saffron, border:`1.5px solid ${COLORS.saffron}`, borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
           🖨️ Print Docket / PDF
         </button>
-        {/* Pre-filled Government Form — for bank_branch and bdo_office modes */}
-        {(() => {
-          const FORM_MAP = {
-            pmjjby: "pmjjby_form", pmsby: "pmsby_form", apy: "apy_form",
-            wb_old_age_pension: "wb_pension_form", wb_widow_pension: "wb_pension_form",
-            manabik: "wb_pension_form", tapasili_bandhu: "wb_pension_form", jai_johar: "wb_pension_form",
-          };
-          const formKey = FORM_MAP[app.scheme.id];
-          if (!formKey) return null;
-          return (
-            <button onClick={() => {
-              const doc = generateDocument(formKey, app.person, app.person, { welfareOfficer:"Welfare Officer / Jan Setu Pratinidhi" });
-              openPrintWindow(doc.title, doc.content);
-            }} style={{ background:COLORS.green, color:"#fff", border:"none", borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:`0 2px 8px ${COLORS.green}40` }}>
-              📄 Print Pre-filled Form
-            </button>
-          );
-        })()}
       </div>
 
       {/* Tabs */}
