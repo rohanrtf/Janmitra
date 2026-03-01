@@ -4460,22 +4460,8 @@ function VerifyScreen({ onVerified }) {
           </button>
         </>
       )}
-        <>
-          <div style={{ background: COLORS.greenPale, border: `1px solid ${COLORS.green}40`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: COLORS.green }}>
-            ✅ OTP sent to <strong>{phone}</strong>
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: COLORS.slate, marginBottom: 5 }}>Enter OTP</label>
-            <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,"").slice(0,6))}
-              type="tel" placeholder="6-digit OTP" style={{ ...inputStyle, letterSpacing: 6, fontSize: 18 }} />
-          </div>
-          <div style={{ background: "#EFF8F3", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.green }}>
-            🔒 Aadhaar number is used only for identity consent — not stored in our system.
-          </div>
-          <Button onClick={() => { if(otp === window._jansetuOtp){ onVerified({ phone, workerId, aadhaarNumber, aadhaarLast4, aadhaarVerified: true, verifyMode: "otp" }); } else { alert("Incorrect OTP. Please try again."); } }}
-            variant="primary" size="lg" disabled={otp.length < 4}>
-            ✅ Verify & Continue
-          </Button>
+        
+          
           <button onClick={() => setStep("phone")} style={{ background: "none", border: "none", color: COLORS.saffron, fontSize: 13, cursor: "pointer", marginTop: 14, display: "flex", alignItems: "center", gap: 4, fontWeight: 700 }}>
             ← Back
           </button>
