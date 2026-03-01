@@ -4698,6 +4698,10 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   };
 
   const addMember = () => {
+    const idx = members.length;
+    Object.entries(newMemberDocs).forEach(([key, data]) => {
+      setScannedDocs(prev => ({ ...prev, [`member_${idx}_${key}`]: data }));
+    });
     setMembers(p => [...p, { ...newMember }]);
     setAddingMember(false);
     setNewMember({ name: "", age: "", gender: "female", relation: "wife", caste: "", maritalStatus: "married", disability: 0, student: false, bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false, aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal" });
