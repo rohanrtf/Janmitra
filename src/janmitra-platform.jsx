@@ -4567,10 +4567,10 @@ function MemberDocUpload({ member, memberIndex, onDocScanned, scannedDocs }) {
   );
 }
 
-function HouseholdScreen({ worker, onComplete, onBack }) {
+function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   // ── Worker data — AI-filled + manual ────────────────────────────────────────
   const [workerData, setWorkerData] = useState({
-    name: "", age: "", gender: "male", caste: "", maritalStatus: "married",
+    name: existingHousehold?.worker?.name || "", age: existingHousehold?.worker?.age || "", gender: existingHousehold?.worker?.gender || "male", caste: existingHousehold?.worker?.caste || "", maritalStatus: existingHousehold?.worker?.maritalStatus || "married",
     disability: 0, unorganised: true, epfoCovered: false, farmer: false,
     // from verify screen
     phone: worker?.phone || "",
@@ -4593,7 +4593,7 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
   const [mismatches, setMismatches] = useState(null); // null = not checked yet
 
   // ── Family members ───────────────────────────────────────────────────────────
-  const [members, setMembers] = useState([]);
+  const [members, setMembers] = useState(existingHousehold?.members || []);
   const [addingMember, setAddingMember] = useState(false);
   const [newMember, setNewMember] = useState({
     name: "", age: "", gender: "female", relation: "wife", caste: "",
@@ -4973,7 +4973,7 @@ function HouseholdScreen({ worker, onComplete, onBack }) {
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
 function QuestionnaireScreen({ household, onComplete, onBack }) {
   const [monthlyIncome, setMonthlyIncome] = useState("");
-  const [annualIncome, setAnnualIncome] = useState("");
+  const [annualIncome, setAnnualIncome] = useState(household?.worker?.annualIncome || "");
   const [rationCard, setRationCard] = useState("");
   const [district] = useState("Paschim Bardhaman");
 
@@ -6245,7 +6245,7 @@ export default function JanSetuApp() {
                 />
               )}
               {screen === "household" && (
-                <HouseholdScreen
+                {
                   worker={verifiedWorker}
                   onComplete={handleHousehold}
                   onBack={() => setScreen("intent")}
