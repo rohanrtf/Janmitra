@@ -1720,7 +1720,7 @@ function openPrintWindow(title, content) {
   <div id="_jansetu_toolbar" style="background:#0D2240;padding:10px 16px;display:flex;gap:10px;align-items:center;border-radius:10px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.15)">
     <button onclick="toggleEdit()" id="_editBtn" style="background:#F5A043;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✏️ Edit</button>
     <button onclick="window.print()" style="background:#1A7A4A;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🖨️ Print</button>
-    <button onclick="window.print()" style="background:#2CA865;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">💾 Save as PDF</button>
+    <button onclick="window.print()" style="background:#2CA865;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">💾 Save as PDF (choose 'Save as PDF' in printer)</button>
     <span id="_editHint" style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:auto;display:none">Click on any text to edit it · Click ✅ Done when finished</span>
   </div>
   <div id="_jansetu_content">
@@ -5794,11 +5794,32 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
 
           if (createableServices.length === 0) return null;
 
-          const actionUrls = {
-            edistrict: "https://edistrict.wb.gov.in",
-            khadya_sathi: "https://khadyasathi.gov.in",
-            nvsp: "https://www.nvsp.in",
-            apply_aadhaar: "https://myaadhaar.uidai.gov.in",
+          // Actions: some open URLs, some generate documents in-app
+          const handleAction = (svc) => {
+            const urls = {
+              edistrict: "https://edistrict.wb.gov.in",
+              khadya_sathi: "https://wbpds.gov.in",
+              nvsp: "https://voters.eci.gov.in",
+              apply_aadhaar: "https://myaadhaar.uidai.gov.in",
+            };
+            // Document generation actions — open a pre-filled form/guide
+            const docActions = {
+              jan_dhan: "jan_dhan_prefill",
+              employer_letter: "employer_address_letter",
+            };
+            if (urls[svc.action]) {
+              window.open(urls[svc.action], "_blank");
+            } else if (docActions[svc.action]) {
+              const doc = generateDocument(docActions[svc.action], result.person, result.person, {}, {});
+              if (doc) openPrintWindow(doc.title, doc.content);
+            } else {
+              // Offline-only services — show helpful guide
+              const guides = {
+                birth_cert: "📋 Birth Certificate\n\nApply at Panchayat / Municipal office with:\n• Hospital discharge slip or delivery record\n• Parent's Aadhaar\n• For school-age children: school records accepted as age proof\n\nProcessing time: 7–15 days",
+                cmo: "♿ Disability Certificate\n\nVisit District Hospital / Govt Hospital CMO:\n📍 Asansol District Hospital, G.T. Road\n\nCarry:\n• Aadhaar card (original)\n• Any existing medical records\n• Passport photo (2 copies)\n\nMedical board examines and certifies disability %.\nCertificate issued within 7–15 days.\nMinimum 40% required for Manabik pension.",
+              };
+              alert(guides[svc.action] || "This document requires an offline visit. Print the submission docket for details on where to go and what to carry.");
+            }
           };
 
           return (
@@ -5807,9 +5828,7 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {createableServices.map(svc => (
                   <button key={svc.id}
-                    onClick={() => {
-                      if (actionUrls[svc.action]) window.open(actionUrls[svc.action], "_blank");
-                    }}
+                    onClick={() => handleAction(svc)}
                     style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${COLORS.saffron}`, background: "transparent", cursor: "pointer", fontSize: 12, fontWeight: 700, color: COLORS.saffron }}>
                     {svc.icon} {svc.name}
                   </button>
@@ -6430,13 +6449,91 @@ function SubmissionConsole({ app, onBack, onSubmitted }) {
 
 // ─── AGENT CONSOLE ────────────────────────────────────────────────────────────
 function AgentConsole({ applications, onUpdateStatus }) {
+  // ── OTP Login Gate ──
+  const [agentLoggedIn, setAgentLoggedIn] = useState(false);
+  const [agentPhone, setAgentPhone] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
+  const [agentName, setAgentName] = useState("");
+
+  // ── Agent Portal State ──
+  const [agentTab, setAgentTab] = useState("pending"); // pending | processed | benefits
   const [selected, setSelected] = useState(null);
   const [submitting, setSubmitting] = useState(null);
   const [langMsg, setLangMsg] = useState("bn");
   const [docStatus, setDocStatus] = useState({});
+  const [filters, setFilters] = useState({ gender: "", scheme: "", status: "", dateFrom: "", dateTo: "" });
+  const [showFilters, setShowFilters] = useState(false);
+
+  // ── OTP Login Screen ──
+  if (!agentLoggedIn) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
+        <h2 style={{ color: COLORS.navy, marginBottom: 4 }}>Agent Login</h2>
+        <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 24 }}>Jan Setu Pratinidhi Portal — OTP verification required</p>
+        <div style={{ maxWidth: 320, margin: "0 auto" }}>
+          {!otpSent ? (
+            <>
+              <Input label="Agent Name" value={agentName} onChange={setAgentName} placeholder="Full name" />
+              <Input label="Mobile Number" value={agentPhone} onChange={setAgentPhone} placeholder="10-digit mobile" type="tel" />
+              <div style={{ marginTop: 16 }}>
+                <Button onClick={() => { if (agentPhone.length >= 10) setOtpSent(true); }} variant="primary" size="lg" disabled={agentPhone.length < 10 || !agentName}>
+                  📲 Send OTP
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ background: COLORS.greenPale, borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 13, color: COLORS.green }}>
+                ✅ OTP sent to {agentPhone}
+              </div>
+              <Input label="Enter OTP" value={otpValue} onChange={setOtpValue} placeholder="6-digit OTP" type="number" />
+              <div style={{ marginTop: 16 }}>
+                <Button onClick={() => { if (otpValue.length >= 4) setAgentLoggedIn(true); }} variant="primary" size="lg" disabled={otpValue.length < 4}>
+                  🔓 Verify & Login
+                </Button>
+              </div>
+              <button onClick={() => setOtpSent(false)} style={{ marginTop: 12, background: "none", border: "none", color: COLORS.saffron, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                ← Change number
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Categorize applications ──
+  const pendingStatuses = ["Docs Pending", "Ready to Submit"];
+  const processedStatuses = ["Submitted"];
+  const completedStatuses = ["Completed"];
+
+  const applyFilters = (apps) => {
+    let filtered = [...apps];
+    if (filters.gender) filtered = filtered.filter(a => (a.person.gender || "").toLowerCase() === filters.gender);
+    if (filters.scheme) filtered = filtered.filter(a => a.scheme.name.toLowerCase().includes(filters.scheme.toLowerCase()));
+    if (filters.status) filtered = filtered.filter(a => a.status === filters.status);
+    return filtered;
+  };
+
+  const pendingApps = applyFilters(applications.filter(a => pendingStatuses.includes(a.status)));
+  const processedApps = applyFilters(applications.filter(a => processedStatuses.includes(a.status)));
+  const completedApps = applyFilters(applications.filter(a => completedStatuses.includes(a.status)));
+
+  // Group by worker
+  const groupByWorker = (apps) => {
+    const groups = {};
+    apps.forEach(app => {
+      const wKey = app.person.name || "Unknown";
+      if (!groups[wKey]) groups[wKey] = { person: app.person, apps: [] };
+      groups[wKey].apps.push(app);
+    });
+    return Object.values(groups);
+  };
 
   // Handle submission done
-  const handleSubmitted = (ref, ackNumber) => {
+  const handleSubmitted = (ref) => {
     onUpdateStatus(ref, "Submitted");
     setSubmitting(null);
     setSelected(null);
@@ -6449,7 +6546,7 @@ function AgentConsole({ applications, onUpdateStatus }) {
     return <SubmissionConsole app={app} onBack={() => setSubmitting(null)} onSubmitted={handleSubmitted} />;
   }
 
-  // Case detail view
+  // ── Case Detail View ──
   if (selected) {
     const app = applications.find(a => a.ref === selected);
     if (!app) { setSelected(null); return null; }
@@ -6462,34 +6559,56 @@ function AgentConsole({ applications, onUpdateStatus }) {
       setDocStatus(p => ({ ...p, [`${ref}:${doc}`]: approved }));
     };
 
+    // Determine why pending
+    const pendingDocs = app.scheme.docs.filter(d => {
+      const key = `${app.ref}:${d}`;
+      return docStatus[key] !== true;
+    });
+    const isPendingDocs = app.status === "Docs Pending";
+
     return (
       <div>
         <BackButton onClick={() => setSelected(null)} label="Back to Pipeline" />
-        <h3 style={{ color:COLORS.navy, marginBottom:4 }}>{app.scheme.icon} {app.scheme.fullName}</h3>
-        <div style={{ color:"#7A8A9A", fontSize:13, marginBottom:16 }}>Ref: {app.ref} · {app.person.name} ({app.person.relation})</div>
+        <h3 style={{ color: COLORS.navy, marginBottom: 4 }}>{app.scheme.icon} {app.scheme.fullName}</h3>
+        <div style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Ref: {app.ref} · {app.person.name} ({app.person.relation})</div>
 
         {/* Status pipeline */}
-        <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
           {STATUSES.map((s, i) => (
-            <div key={s} style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:700, background:s===app.status ? STATUS_COLORS[s] : "#F0F4F8", color:s===app.status ? "#fff" : "#A0AABB" }}>{i+1}. {s}</div>
+            <div key={s} style={{ padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 700, background: s === app.status ? STATUS_COLORS[s] : "#F0F4F8", color: s === app.status ? "#fff" : "#A0AABB" }}>{i + 1}. {s}</div>
           ))}
         </div>
 
-        {/* Documents */}
-        <Card style={{ marginBottom:16 }}>
-          <div style={{ fontWeight:700, color:COLORS.navy, marginBottom:12 }}>📋 Documents</div>
+        {/* Why pending */}
+        {isPendingDocs && (
+          <div style={{ background: "#FEF3E2", border: "1.5px solid #E8690B40", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, color: COLORS.amber, fontSize: 13, marginBottom: 6 }}>⏳ Pending Reason</div>
+            <div style={{ fontSize: 12, color: COLORS.slate }}>
+              {pendingDocs.length > 0 ? `${pendingDocs.length} document(s) need upload/approval: ${pendingDocs.slice(0, 3).join(", ")}${pendingDocs.length > 3 ? "..." : ""}` : "All documents uploaded — mark docs as approved below to proceed."}
+            </div>
+          </div>
+        )}
+
+        {/* Documents with scan/upload */}
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 12 }}>📋 Documents — Verify / Upload</div>
           {app.scheme.docs.map(d => {
             const key = `${app.ref}:${d}`;
             const st = docStatus[key];
             return (
-              <div key={d} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #F0F4F8" }}>
-                <div>
-                  <div style={{ fontSize:13, color:COLORS.slate }}>{d}</div>
-                  {st !== undefined && <div style={{ fontSize:10, color:st ? COLORS.green : COLORS.red, fontWeight:700 }}>{st ? "✅ Approved" : "❌ Rejected"}</div>}
+              <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F0F4F8" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: COLORS.slate }}>{d}</div>
+                  {st !== undefined && <div style={{ fontSize: 10, color: st ? COLORS.green : COLORS.red, fontWeight: 700 }}>{st ? "✅ Verified" : "❌ Rejected — re-upload needed"}</div>}
                 </div>
-                <div style={{ display:"flex", gap:6 }}>
-                  <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding:"3px 9px", borderRadius:5, border:"none", background:st===true ? COLORS.green : "#E8F5EE", color:st===true ? "#fff" : COLORS.green, fontSize:11, cursor:"pointer", fontWeight:700 }}>✅</button>
-                  <button onClick={() => toggleDoc(app.ref, d, false)} style={{ padding:"3px 9px", borderRadius:5, border:"none", background:st===false ? COLORS.red : "#FADBD8", color:st===false ? "#fff" : COLORS.red, fontSize:11, cursor:"pointer", fontWeight:700 }}>❌</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {st !== true && (
+                    <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#EAF0FA", color: COLORS.navyMid, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+                      📤 Upload & Approve
+                    </button>
+                  )}
+                  <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding: "3px 9px", borderRadius: 5, border: "none", background: st === true ? COLORS.green : "#E8F5EE", color: st === true ? "#fff" : COLORS.green, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>✅</button>
+                  <button onClick={() => toggleDoc(app.ref, d, false)} style={{ padding: "3px 9px", borderRadius: 5, border: "none", background: st === false ? COLORS.red : "#FADBD8", color: st === false ? "#fff" : COLORS.red, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>❌</button>
                 </div>
               </div>
             );
@@ -6497,45 +6616,40 @@ function AgentConsole({ applications, onUpdateStatus }) {
         </Card>
 
         {/* Worker message */}
-        <Card style={{ marginBottom:16, background:"#F8F5FF" }}>
-          <div style={{ fontWeight:700, color:COLORS.navy, marginBottom:10 }}>💬 Worker Message</div>
-          <div style={{ display:"flex", gap:8, marginBottom:10 }}>
-            {["bn","hi","en"].map(l => (
-              <button key={l} onClick={() => setLangMsg(l)} style={{ padding:"4px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:700, fontFamily:"inherit", background:langMsg===l ? COLORS.saffron : COLORS.mist, color:langMsg===l ? "#fff" : COLORS.slate }}>
-                {l==="bn" ? "বাংলা" : l==="hi" ? "हिंदी" : "English"}
+        <Card style={{ marginBottom: 16, background: "#F8F5FF" }}>
+          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10 }}>💬 Worker Message</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            {["bn", "hi", "en"].map(l => (
+              <button key={l} onClick={() => setLangMsg(l)} style={{ padding: "4px 12px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit", background: langMsg === l ? COLORS.saffron : COLORS.mist, color: langMsg === l ? "#fff" : COLORS.slate }}>
+                {l === "bn" ? "বাংলা" : l === "hi" ? "हिंदी" : "English"}
               </button>
             ))}
           </div>
-          <div style={{ background:"#fff", borderRadius:8, padding:12, fontSize:13, color:COLORS.slate, border:"1px solid #E8EDF3" }}>{sampleMsg}</div>
-          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+          <div style={{ background: "#fff", borderRadius: 8, padding: 12, fontSize: 13, color: COLORS.slate, border: "1px solid #E8EDF3" }}>{sampleMsg}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <Button variant="secondary" size="sm">📲 Send WhatsApp</Button>
             <Button variant="subtle" size="sm">💬 Send SMS</Button>
           </div>
         </Card>
 
         {/* Actions */}
-        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {app.status === "Ready to Submit" && schemeHasCfg && (
-            <Button onClick={() => setSubmitting(app.ref)} variant="primary">
-              🚀 Open Submission Console
-            </Button>
+            <Button onClick={() => setSubmitting(app.ref)} variant="primary">🚀 Open Submission Console</Button>
           )}
           {app.status === "Ready to Submit" && !schemeHasCfg && (
-            <Button onClick={() => { onUpdateStatus(app.ref, "Submitted"); setSelected(null); }} variant="primary">
-              ▶ Mark as Submitted
-            </Button>
+            <Button onClick={() => { onUpdateStatus(app.ref, "Submitted"); setSelected(null); }} variant="primary">▶ Mark as Submitted</Button>
           )}
-          {app.status !== "Completed" && app.status !== "Ready to Submit" && (
-            <Button onClick={() => { onUpdateStatus(app.ref, nextStatus); setSelected(null); }} variant="primary">
-              ▶ Move to: {nextStatus}
-            </Button>
+          {app.status === "Docs Pending" && pendingDocs.length === 0 && (
+            <Button onClick={() => { onUpdateStatus(app.ref, "Ready to Submit"); setSelected(null); }} variant="primary">✅ All Docs Ready — Move to Submit</Button>
+          )}
+          {app.status !== "Completed" && app.status !== "Ready to Submit" && app.status !== "Docs Pending" && (
+            <Button onClick={() => { onUpdateStatus(app.ref, nextStatus); setSelected(null); }} variant="primary">▶ Move to: {nextStatus}</Button>
           )}
           {app.status === "Submitted" && (
-            <Button onClick={() => { onUpdateStatus(app.ref, "Completed"); setSelected(null); }} variant="primary">
-              🏆 Mark Completed
-            </Button>
+            <Button onClick={() => { onUpdateStatus(app.ref, "Completed"); setSelected(null); }} variant="primary">🏆 Mark Completed</Button>
           )}
-          <button onClick={() => generateSubmissionDocket(app, {}, {})} style={{ padding:"9px 16px", background:COLORS.mist, color:COLORS.slate, border:"none", borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+          <button onClick={() => generateSubmissionDocket(app, {}, {})} style={{ padding: "9px 16px", background: COLORS.mist, color: COLORS.slate, border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             🖨️ Print Docket
           </button>
         </div>
@@ -6543,64 +6657,215 @@ function AgentConsole({ applications, onUpdateStatus }) {
     );
   }
 
-  // Pipeline list view
-  const readyToSubmit = applications.filter(a => a.status === "Ready to Submit");
+  // ── Filters Bar ──
+  const FilterBar = () => (
+    <div style={{ background: "#F4F6F8", borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: showFilters ? 10 : 0 }}>
+        <button onClick={() => setShowFilters(!showFilters)} style={{ background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, color: COLORS.navy, fontFamily: "inherit" }}>
+          🔍 {showFilters ? "Hide Filters" : "Show Filters"} {(filters.gender || filters.scheme || filters.status) ? `(${[filters.gender, filters.scheme, filters.status].filter(Boolean).length} active)` : ""}
+        </button>
+        {(filters.gender || filters.scheme || filters.status) && (
+          <button onClick={() => setFilters({ gender: "", scheme: "", status: "", dateFrom: "", dateTo: "" })} style={{ background: "#FADBD8", color: COLORS.red, border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            ✕ Clear
+          </button>
+        )}
+      </div>
+      {showFilters && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 10px" }}>
+          <Input label="Gender" value={filters.gender} onChange={v => setFilters(p => ({ ...p, gender: v }))} options={[{ value: "", label: "All" }, { value: "male", label: "Male" }, { value: "female", label: "Female" }]} />
+          <Input label="Scheme" value={filters.scheme} onChange={v => setFilters(p => ({ ...p, scheme: v }))} placeholder="Search scheme..." />
+          <Input label="Status" value={filters.status} onChange={v => setFilters(p => ({ ...p, status: v }))} options={[{ value: "", label: "All" }, ...STATUSES.map(s => ({ value: s, label: s }))]} />
+        </div>
+      )}
+    </div>
+  );
 
+  // ── Tab Styles ──
+  const tabBtn = (key, label, icon, count) => (
+    <button key={key} onClick={() => setAgentTab(key)}
+      style={{ flex: 1, padding: "10px 8px", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 700, fontSize: 12, borderRadius: "10px 10px 0 0",
+        background: agentTab === key ? "#fff" : "transparent", color: agentTab === key ? COLORS.navy : "rgba(255,255,255,0.6)",
+        borderBottom: agentTab === key ? `3px solid ${COLORS.saffron}` : "3px solid transparent",
+      }}>
+      {icon} {label} {count > 0 && <span style={{ background: agentTab === key ? COLORS.saffron : "rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10, padding: "1px 7px", fontSize: 10, marginLeft: 4 }}>{count}</span>}
+    </button>
+  );
+
+  // ── Worker Group Card ──
+  const WorkerGroup = ({ group }) => (
+    <Card style={{ marginBottom: 12, padding: 0, overflow: "hidden" }}>
+      <div style={{ background: "#EAF0FA", padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 14 }}>👤 {group.person.name}</div>
+          <div style={{ fontSize: 11, color: "#7A8A9A" }}>{group.person.relation} · {group.person.gender} · {group.apps.length} scheme{group.apps.length > 1 ? "s" : ""}</div>
+        </div>
+      </div>
+      {group.apps.map(app => (
+        <div key={app.ref} onClick={() => setSelected(app.ref)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid #F0F4F8", cursor: "pointer" }}>
+          <div>
+            <div style={{ fontWeight: 600, color: COLORS.navy, fontSize: 13 }}>{app.scheme.icon} {app.scheme.name}</div>
+            <div style={{ fontSize: 11, color: "#7A8A9A" }}>Ref: {app.ref} · {app.person.name} ({app.person.relation})</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Badge label={app.status} color={STATUS_COLORS[app.status]} />
+            <span style={{ color: COLORS.saffron }}>›</span>
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+
+  // ── Benefits Summary ──
+  const BenefitsSummary = () => {
+    const benefitSchemes = {};
+    completedApps.forEach(app => {
+      const key = app.scheme.id;
+      if (!benefitSchemes[key]) benefitSchemes[key] = { scheme: app.scheme, count: 0, people: new Set() };
+      benefitSchemes[key].count++;
+      benefitSchemes[key].people.add(app.person.name);
+    });
+
+    const totalBeneficiaries = new Set(completedApps.map(a => a.person.name)).size;
+    const totalSchemes = Object.keys(benefitSchemes).length;
+
+    // Estimate benefit values from scheme data
+    const parseBenefit = (str) => {
+      const m = (str || "").match(/₹([\d,]+)/);
+      return m ? parseInt(m[1].replace(/,/g, "")) : 0;
+    };
+
+    const totalValue = Object.values(benefitSchemes).reduce((sum, b) => sum + (parseBenefit(b.scheme.benefit) * b.count), 0);
+
+    return (
+      <div>
+        {/* Summary cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+          <div style={{ background: "#E8F5EE", borderRadius: 12, padding: 16, textAlign: "center" }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: COLORS.green }}>₹{totalValue > 0 ? totalValue.toLocaleString("en-IN") : "—"}</div>
+            <div style={{ fontSize: 11, color: COLORS.slate, fontWeight: 700, marginTop: 4 }}>Total Benefit Value</div>
+          </div>
+          <div style={{ background: "#EAF0FA", borderRadius: 12, padding: 16, textAlign: "center" }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: COLORS.navy }}>{totalBeneficiaries}</div>
+            <div style={{ fontSize: 11, color: COLORS.slate, fontWeight: 700, marginTop: 4 }}>People Benefited</div>
+          </div>
+          <div style={{ background: "#FEF3E2", borderRadius: 12, padding: 16, textAlign: "center" }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: COLORS.saffron }}>{totalSchemes}</div>
+            <div style={{ fontSize: 11, color: COLORS.slate, fontWeight: 700, marginTop: 4 }}>Schemes Activated</div>
+          </div>
+        </div>
+
+        {/* Scheme-wise breakdown */}
+        {Object.values(benefitSchemes).length > 0 ? Object.values(benefitSchemes).map(b => (
+          <Card key={b.scheme.id} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 14 }}>{b.scheme.icon} {b.scheme.name}</div>
+                <div style={{ fontSize: 12, color: "#7A8A9A" }}>{b.scheme.benefit} · {b.count} application{b.count > 1 ? "s" : ""} · {b.people.size} beneficiar{b.people.size > 1 ? "ies" : "y"}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: COLORS.green }}>₹{(parseBenefit(b.scheme.benefit) * b.count).toLocaleString("en-IN")}</div>
+                <div style={{ fontSize: 10, color: "#7A8A9A" }}>est. value</div>
+              </div>
+            </div>
+          </Card>
+        )) : (
+          <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>📊</div>
+            No completed applications yet. Benefits will appear here as schemes are processed.
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Main Agent Portal View ──
   return (
     <div>
-      <h2 style={{ fontSize:20, color:COLORS.navy, marginBottom:4 }}>🗂️ Agent Pipeline</h2>
-      <p style={{ color:"#7A8A9A", fontSize:13, marginBottom:16 }}>All applications — click to review and submit</p>
+      {/* Agent header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>🗂️ Agent Portal</h2>
+          <div style={{ fontSize: 12, color: "#7A8A9A" }}>Welcome, {agentName} · {applications.length} total applications</div>
+        </div>
+        <button onClick={() => setAgentLoggedIn(false)} style={{ background: "#FADBD8", color: COLORS.red, border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          🔒 Logout
+        </button>
+      </div>
 
-      {/* Ready to submit highlight */}
-      {readyToSubmit.length > 0 && (
-        <div style={{ background:"#F3E8FF", border:"1.5px solid #7B2CBF40", borderRadius:12, padding:14, marginBottom:20 }}>
-          <div style={{ fontWeight:700, color:"#7B2CBF", marginBottom:10, fontSize:13 }}>🚀 Ready to Submit — {readyToSubmit.length} case{readyToSubmit.length>1?"s":""}</div>
-          {readyToSubmit.map(app => (
-            <div key={app.ref} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:"#fff", borderRadius:8, padding:"10px 12px", marginBottom:6, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
-              <div>
-                <div style={{ fontWeight:700, color:COLORS.navy, fontSize:13 }}>{app.scheme.icon} {app.scheme.name} — {app.person.name}</div>
-                <div style={{ fontSize:11, color:"#7A8A9A" }}>Ref: {app.ref}</div>
+      {/* 3-Tab Navigation */}
+      <div style={{ display: "flex", gap: 2, background: COLORS.navy, borderRadius: "12px 12px 0 0", padding: "4px 4px 0" }}>
+        {tabBtn("pending", "Pending", "⏳", pendingApps.length)}
+        {tabBtn("processed", "Processed", "📤", processedApps.length)}
+        {tabBtn("benefits", "Benefits", "🏆", completedApps.length)}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: "0 0 12px 12px", padding: 16, border: "1px solid #E8EDF3", borderTop: "none", minHeight: 200 }}>
+
+        {/* ── PENDING TAB ── */}
+        {agentTab === "pending" && (
+          <div>
+            <FilterBar />
+            {pendingApps.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
+                No pending applications. All caught up!
               </div>
-              <button onClick={() => setSubmitting(app.ref)} style={{ background:"#7B2CBF", color:"#fff", border:"none", borderRadius:8, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                🚀 Submit →
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {applications.length === 0 && (
-        <div style={{ textAlign:"center", padding:40, color:"#7A8A9A" }}>
-          <div style={{ fontSize:40, marginBottom:10 }}>📭</div>
-          No applications yet. Workers will appear here after applying.
-        </div>
-      )}
-
-      {STATUSES.map(status => {
-        const group = applications.filter(a => a.status === status);
-        if (!group.length) return null;
-        return (
-          <div key={status} style={{ marginBottom:20 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <div style={{ width:10, height:10, borderRadius:"50%", background:STATUS_COLORS[status] }} />
-              <span style={{ fontWeight:700, color:COLORS.navy }}>{status}</span>
-              <Badge label={group.length} color={STATUS_COLORS[status]} />
-            </div>
-            {group.map(app => (
-              <Card key={app.ref} onClick={() => setSelected(app.ref)} style={{ marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
-                <div>
-                  <div style={{ fontWeight:700, color:COLORS.navy, fontSize:13 }}>{app.scheme.icon} {app.scheme.name} — {app.person.name}</div>
-                  <div style={{ fontSize:11, color:"#7A8A9A" }}>Ref: {app.ref} · {app.person.relation}</div>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <Badge label={status} color={STATUS_COLORS[status]} />
-                  <span style={{ color:COLORS.saffron }}>›</span>
-                </div>
-              </Card>
-            ))}
+            ) : (
+              groupByWorker(pendingApps).map((group, i) => <WorkerGroup key={i} group={group} />)
+            )}
           </div>
-        );
-      })}
+        )}
+
+        {/* ── PROCESSED TAB ── */}
+        {agentTab === "processed" && (
+          <div>
+            <FilterBar />
+            {processedApps.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>📭</div>
+                No submitted applications yet.
+              </div>
+            ) : (
+              groupByWorker(processedApps).map((group, i) => (
+                <Card key={i} style={{ marginBottom: 12, padding: 0, overflow: "hidden" }}>
+                  <div style={{ background: "#E8F5EE", padding: "10px 14px" }}>
+                    <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 14 }}>👤 {group.person.name}</div>
+                    <div style={{ fontSize: 11, color: "#7A8A9A" }}>{group.apps.length} scheme{group.apps.length > 1 ? "s" : ""} submitted</div>
+                  </div>
+                  {group.apps.map(app => {
+                    const cfg = SUBMISSION_CFG[app.scheme.id];
+                    return (
+                      <div key={app.ref} style={{ padding: "10px 14px", borderBottom: "1px solid #F0F4F8" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontWeight: 600, color: COLORS.navy, fontSize: 13 }}>{app.scheme.icon} {app.scheme.name}</div>
+                            <div style={{ fontSize: 11, color: "#7A8A9A" }}>Ref: {app.ref}</div>
+                          </div>
+                          <Badge label="Submitted" color={STATUS_COLORS["Submitted"]} />
+                        </div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                          {cfg?.portalUrl && (
+                            <button onClick={() => window.open(cfg.portalUrl, "_blank")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${COLORS.navy}40`, background: "#EAF0FA", color: COLORS.navy, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                              🌐 Check Status on Portal ↗
+                            </button>
+                          )}
+                          <button onClick={() => { onUpdateStatus(app.ref, "Completed"); }} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: COLORS.green, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                            🏆 Mark Benefit Received
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── BENEFITS TAB ── */}
+        {agentTab === "benefits" && <BenefitsSummary />}
+      </div>
     </div>
   );
 }
