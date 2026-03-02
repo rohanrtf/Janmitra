@@ -939,6 +939,40 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
         <div class="stamp-note">[ Affix Company Seal ]</div>
       `
     },
+    salary_certificate: {
+      title: "Salary / Employment Certificate",
+      content: `
+        <div class="letterhead">
+          <div class="logo">MB SPONGE & POWER LIMITED</div>
+          <div class="sub">Jamuria, Paschim Bardhaman, West Bengal — 713337 | GSTIN: 19AAACM1234F1Z5</div>
+          <div class="divider"></div>
+        </div>
+        <p class="ref">Ref: MBSPL/HR/SAL/${new Date().getFullYear()}/${Math.floor(Math.random()*9000)+1000} &nbsp;&nbsp;&nbsp; Date: ${today}</p>
+        <h2>TO WHOMSOEVER IT MAY CONCERN</h2>
+        <h3>Subject: Certificate of Employment and Salary</h3>
+        <p>This is to certify that <strong>${worker?.name || person.name || "[Worker Name]"}</strong>, Aadhaar No. XXXX-XXXX-${worker?.aadhaarLast4 || person.aadhaarLast4 || "XXXX"}, is employed as a worker at <strong>MB Sponge & Power Limited, Jamuria, Paschim Bardhaman</strong>.</p>
+        <table class="cs-table">
+          <tr><td class="cs-label">Employee Name</td><td class="cs-value"><strong>${worker?.name || person.name || "[Name]"}</strong></td></tr>
+          <tr><td class="cs-label">Designation</td><td class="cs-value">Worker — Sponge Iron Division</td></tr>
+          <tr><td class="cs-label">Department</td><td class="cs-value">Production / Maintenance</td></tr>
+          <tr><td class="cs-label">Monthly Gross Salary</td><td class="cs-value"><strong>₹__________ /month</strong> (to be filled by HR)</td></tr>
+          <tr><td class="cs-label">Annual Income (approx.)</td><td class="cs-value"><strong>₹__________ /year</strong></td></tr>
+          <tr><td class="cs-label">Mode of Payment</td><td class="cs-value">Bank Transfer to A/C: ${worker?.bankAccountNo || "[Account No.]"}</td></tr>
+          <tr><td class="cs-label">Employee Since</td><td class="cs-value">${worker?.joiningYear || "[Year of Joining]"}</td></tr>
+        </table>
+        <p>This certificate is issued at the request of the employee for the purpose of availing government welfare scheme benefits / income certificate application.</p>
+        <p>The salary details mentioned above are true and correct as per our payroll records.</p>
+        <div class="signature">
+          <p>&nbsp;</p><p>&nbsp;</p>
+          <p><strong>________________________</strong></p>
+          <p><strong>${welfareOfficer}</strong></p>
+          <p>HR Department / Welfare Officer</p>
+          <p>MB Sponge & Power Limited, Jamuria</p>
+          <p>Date: ${today}</p>
+        </div>
+        <div class="stamp-note">[ Affix Company Seal ]</div>
+      `
+    },
     bank_name_correction_letter: {
       title: "Bank KYC Name Correction Request",
       content: `
@@ -1678,63 +1712,60 @@ function openPrintWindow(title, content) {
     .docket-table th { background: #F4F6F8; font-size: 11px; font-weight: 700; color: #5A6A7A; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 16px; }
     .checklist-box { padding: 14px 16px; }
     .checklist-box label { display: block; margin: 6px 0; font-size: 13px; }
-    @media print { body { margin: 0; } button { display: none; } }
+    #_jansetu_toolbar { position: sticky; top: 0; z-index: 9999; }
+    @media print { body { margin: 0; } #_jansetu_toolbar { display: none !important; } #_jansetu_content { border: none !important; outline: none !important; } }
+    #_jansetu_content[contenteditable="true"] { outline: 2px dashed #E8690B; border-radius: 8px; padding: 8px; }
   </style>
   </head><body>
-  <div style="text-align:right;margin-bottom:16px"><button onclick="window.print()" style="background:#E8690B;color:#fff;border:none;padding:8px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">🖨️ Print / Save as PDF</button></div>
+  <div id="_jansetu_toolbar" style="background:#0D2240;padding:10px 16px;display:flex;gap:10px;align-items:center;border-radius:10px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.15)">
+    <button onclick="toggleEdit()" id="_editBtn" style="background:#F5A043;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✏️ Edit</button>
+    <button onclick="window.print()" style="background:#1A7A4A;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">🖨️ Print</button>
+    <button onclick="window.print()" style="background:#2CA865;color:#fff;border:none;padding:8px 16px;border-radius:7px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">💾 Save as PDF</button>
+    <span id="_editHint" style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:auto;display:none">Click on any text to edit it · Click ✅ Done when finished</span>
+  </div>
+  <div id="_jansetu_content">
   ${content}
+  </div>
+  <script>
+    var editing = false;
+    function toggleEdit() {
+      editing = !editing;
+      var el = document.getElementById('_jansetu_content');
+      var btn = document.getElementById('_editBtn');
+      var hint = document.getElementById('_editHint');
+      el.contentEditable = editing;
+      btn.textContent = editing ? '✅ Done Editing' : '✏️ Edit';
+      btn.style.background = editing ? '#1A7A4A' : '#F5A043';
+      hint.style.display = editing ? 'inline' : 'none';
+      if (editing) el.focus();
+    }
+  </script>
   </body></html>`;
   _openDoc(html);
 }
 
 function _openDoc(html) {
-  // Use a hidden iframe injected into the current page — works in all sandbox environments
-  // Remove any existing print frame
-  const existing = document.getElementById("_jan-setu_print_frame");
-  if (existing) existing.remove();
+  // Open in new window/tab — most reliable across all environments
+  const w = window.open("", "_blank");
+  if (w) {
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  } else {
+    // Fallback: iframe overlay if popup blocked
+    const existing = document.getElementById("_jan-setu_print_frame");
+    if (existing) existing.remove();
 
-  const iframe = document.createElement("iframe");
-  iframe.id = "_jan-setu_print_frame";
-  iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:#fff";
-  document.body.appendChild(iframe);
+    const iframe = document.createElement("iframe");
+    iframe.id = "_jan-setu_print_frame";
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:#fff";
+    document.body.appendChild(iframe);
 
-  // Inject toolbar + editable content
-  const toolbarHtml = `
-    <div id="_jansetu_toolbar" style="position:fixed;top:0;left:0;right:0;background:#0D2240;padding:8px 16px;display:flex;gap:10px;align-items:center;z-index:100001;box-shadow:0 2px 12px rgba(0,0,0,0.3)">
-      <button onclick="parent.document.getElementById('_jan-setu_print_frame').remove()" style="background:#E8690B;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✕ Close</button>
-      <button onclick="window.print()" style="background:#1A7A4A;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Print</button>
-      <button onclick="window.print()" style="background:#2CA865;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">💾 Save as PDF</button>
-      <button onclick="toggleEdit()" id="_editBtn" style="background:#F5A043;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✏️ Edit</button>
-      <span style="color:rgba(255,255,255,0.5);font-size:11px;margin-left:auto">Jan Setu · Click "Save as PDF" → choose "Save as PDF" in print dialog</span>
-    </div>
-    <script>
-      var editing = false;
-      function toggleEdit() {
-        editing = !editing;
-        var content = document.getElementById('_jansetu_content');
-        content.contentEditable = editing;
-        content.style.outline = editing ? '2px dashed #E8690B' : 'none';
-        document.getElementById('_editBtn').textContent = editing ? '✅ Done Editing' : '✏️ Edit';
-        document.getElementById('_editBtn').style.background = editing ? '#1A7A4A' : '#F5A043';
-      }
-    </script>
-  `;
-
-  // Wrap content in editable div and add toolbar
-  const modifiedHtml = html.replace('</body>', `
-    <style>
-      @media print { #_jansetu_toolbar { display: none !important; } #_jansetu_content { margin-top: 0 !important; } }
-      #_jansetu_content { margin-top: 56px; }
-    </style>
-    </body>`
-  ).replace(/<body[^>]*>/, (match) => `${match}${toolbarHtml}<div id="_jansetu_content">`
-  ).replace('</body>', '</div></body>');
-
-  // Write content into iframe
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open();
-  doc.write(modifiedHtml);
-  doc.close();
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+  }
 }
 
 // ─── DOC HEALTH SCREEN ────────────────────────────────────────────────────────
@@ -1977,6 +2008,7 @@ function DocHealthScreen({ household, questionnaire, appSettings, onProceed, onB
                               caste_cert_cheatsheet: "📋 e-District Application Guide",
                               bdo_caste_docket: "📦 BDO Visit Docket",
                               income_cert_cheatsheet: "📋 Income Cert Guide",
+                              salary_certificate: "📄 Salary Certificate",
                               kanyashree_bank_docket: "📦 School Bank Account Guide",
                             };
                             const isMainPerson = !path.id.includes("member");
@@ -3584,7 +3616,7 @@ const DOC_CATALOGUE = [
         { key: "ration_card",    label: "Ration Card",          required: false, hint: "Front page with family details (if available)",       accept: "image/*,.pdf", sharedKey: "ration_card" },
       ]},
       { category: "Income Proof", categoryHint: "Proves the applicant's income level for the certificate", items: [
-        { key: "salary_cert",    label: "Salary / Employer Certificate", required: true,  hint: "MB Sponge letterhead — from HR dept",         accept: "image/*,.pdf", generateType: "employer_address_letter", generateLabel: "Generate Now 🖨️" },
+        { key: "salary_cert",    label: "Salary / Employer Certificate", required: true,  hint: "MB Sponge letterhead — from HR dept",         accept: "image/*,.pdf", generateType: "salary_certificate", generateLabel: "Generate Now 🖨️" },
       ]},
       { category: "Photo Proof", categoryHint: "Recent passport-size photograph of the applicant", items: [
         { key: "photo",          label: "Passport Photo (×2)",  required: true,  hint: "Recent, white background, front-facing",              accept: "image/*",      sharedKey: "photo" },
