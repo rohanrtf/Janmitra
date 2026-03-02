@@ -683,7 +683,60 @@ function generateDocIssues(worker, members, questionnaire) {
     }
   }
 
-  // ── WORKER: Income cert missing ──────────────────────────────────────────
+  // ── WORKER: Missing documents — check ALL potentially needed docs ──────────
+  // Bank passbook not uploaded/scanned
+  if (!w.bankAccount && !w.bankAccountNo) {
+    add({
+      person: w.name, personType: "Worker",
+      severity: "high", category: "document_missing", code: "BANK_PASSBOOK_MISSING",
+      title: "Bank passbook not uploaded",
+      detail: "Bank account details not available. Required for PMJJBY, PMSBY, APY, PM-SYM, Lakshmir Bhandar, and ALL schemes that pay via Direct Benefit Transfer.",
+      paths: [
+        {
+          id: "upload_passbook", label: "Upload bank passbook", icon: "🏦", recommended: true, days: "Immediate",
+          steps: ["Go back to Household step and scan bank passbook using AI scanner","Or: open the Docs tab and upload bank passbook there","First page of passbook showing account number, name, IFSC, branch"],
+          documents: ["Bank passbook (first page) — or cancelled cheque or bank statement showing details"],
+          generates: [],
+        },
+        {
+          id: "open_jan_dhan", label: "Open new Jan Dhan account", icon: "🏦", days: "Same day",
+          steps: ["Visit any nationalised bank (SBI Jamuria / BOB Asansol)","Request Jan Dhan account — zero balance, free","Carry Aadhaar original + 2 passport photos"],
+          documents: ["Aadhaar card (original + photocopy)","2 passport photos"],
+          generates: ["jan_dhan_prefill","jan_dhan_docket"],
+        },
+      ],
+      blockedSchemes: ["PMJJBY","PMSBY","APY","PM-SYM","Lakshmir Bhandar","All DBT payment schemes"],
+    });
+  }
+
+  // Caste certificate not available (needed for SC/ST/OBC specific schemes)
+  if (!w.casteCert && (w.caste === "SC" || w.caste === "ST" || (w.caste || "").startsWith("OBC"))) {
+    add({
+      person: w.name, personType: "Worker",
+      severity: "high", category: "document_missing", code: "CASTE_CERT_MISSING",
+      title: `${w.caste || "Caste"} certificate not available`,
+      detail: `Caste certificate required for caste-specific schemes: Tapasili Bandhu, Jai Johar, SC/ST slab of Lakshmir Bhandar, NSP scholarships. Apply via e-District or BDO office.`,
+      paths: [
+        {
+          id: "edistrict_caste", label: "Apply online — e-District portal", icon: "🌐", recommended: true, days: "15–30 days",
+          steps: ["Open edistrict.wb.gov.in","Register / login → Services → Social Welfare → Caste Certificate","Fill application with Aadhaar details + upload scanned documents","Submit — Application ID generated, certificate issued in 15–30 days"],
+          documents: ["Aadhaar card (scan)","Father's caste certificate or old caste certificate (scan)","Passport photo"],
+          portalUrl: "https://edistrict.wb.gov.in",
+          portalLabel: "Open e-District Portal →",
+          generates: ["caste_cert_cheatsheet"],
+        },
+        {
+          id: "bdo_caste", label: "BDO office (offline)", icon: "🏛️", days: "15–30 days",
+          steps: ["Visit BDO office, Jamuria Block","Ask for Caste Certificate application form","Submit form + documents","Collect certificate in 15–30 days"],
+          documents: ["Aadhaar photocopy","Father's caste certificate","2 passport photos"],
+          generates: ["bdo_caste_docket"],
+        },
+      ],
+      blockedSchemes: ["Tapasili Bandhu (SC pension)","Jai Johar (ST pension)","SC/ST slab of Lakshmir Bhandar","NSP SC/ST scholarships"],
+    });
+  }
+
+  // Income certificate not available
   if (w.incomeCertAvailable === false) {
     add({
       person: w.name, personType: "Worker",
@@ -701,6 +754,27 @@ function generateDocIssues(worker, members, questionnaire) {
         },
       ],
       blockedSchemes: ["SVMCM Scholarship","Rupashree Prakalpa","Kanyashree income verification","NSP Scholarships"],
+    });
+  }
+
+  // Ration card not available (helpful for many WB schemes as address proof)
+  if (!q.rationCard || q.rationCard === "No") {
+    add({
+      person: w.name, personType: "Worker",
+      severity: "medium", category: "document_missing", code: "RATION_CARD_MISSING",
+      title: "Ration card not available",
+      detail: "Ration card is used as both family identity proof and address proof for multiple WB schemes. Also needed for Swasthya Sathi, subsidized food. Apply via Khadya Sathi portal.",
+      paths: [
+        {
+          id: "khadya_sathi", label: "Apply via Khadya Sathi portal", icon: "🌐", recommended: true, days: "30–45 days",
+          steps: ["Open khadyasathi.gov.in","Register with mobile number","Fill household details + member details","Upload Aadhaar of all members + address proof","Submit — digital ration card issued after verification"],
+          documents: ["Aadhaar card of all family members (scan)","Address proof — voter ID / Aadhaar / electricity bill","Income proof (for PHH/AAY category)"],
+          portalUrl: "https://khadyasathi.gov.in",
+          portalLabel: "Open Khadya Sathi Portal →",
+          generates: ["ration_card_cheatsheet"],
+        },
+      ],
+      blockedSchemes: ["Swasthya Sathi (address proof)","Subsidized food entitlement","Many WB scheme applications use ration card as family proof"],
     });
   }
 
@@ -1144,6 +1218,30 @@ function generateDocument(type, worker, member, appSettings, questionnaire) {
             <div class="cs-step"><span class="step-num">3</span>Certificate issued same day or within 3 days</div>
           </div>
           <div class="cs-note">💡 MB Sponge can issue a salary certificate — ask welfare officer to get it stamped. This counts as income proof for most scheme portals.</div>
+        </div>
+      `
+    },
+
+    ration_card_cheatsheet: {
+      title: "Ration Card — Application Guide",
+      content: `
+        <div class="cheatsheet">
+          <div class="cs-header">🗂️ Ration Card — How to Apply</div>
+          <div class="cs-sub">Apply via Khadya Sathi portal or Food & Supplies office</div>
+          <table class="cs-table">
+            <tr><td class="cs-label">Head of Household</td><td class="cs-value"><strong>${worker?.name || person.name || "[Name]"}</strong></td></tr>
+            <tr><td class="cs-label">Portal</td><td class="cs-value">khadyasathi.gov.in</td></tr>
+            <tr><td class="cs-label">Time</td><td class="cs-value">30–45 days</td></tr>
+            <tr><td class="cs-label">Fee</td><td class="cs-value">Free</td></tr>
+          </table>
+          <div class="cs-steps">
+            <div class="cs-step"><span class="step-num">1</span>Open <strong>khadyasathi.gov.in</strong> → Register with mobile number</div>
+            <div class="cs-step"><span class="step-num">2</span>Fill household details + all family members</div>
+            <div class="cs-step"><span class="step-num">3</span>Upload Aadhaar of all members + address proof (employer letter works)</div>
+            <div class="cs-step"><span class="step-num">4</span>Submit → digital ration card issued after field verification</div>
+          </div>
+          <div class="cs-note">📎 Documents needed: Aadhaar of all members · Address proof · Income proof (for PHH/AAY category)</div>
+          <div class="cs-note">💡 Ration card is useful as family identity proof and address proof for Swasthya Sathi, Lakshmir Bhandar, and many WB schemes.</div>
         </div>
       `
     },
@@ -4832,7 +4930,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
   const [members, setMembers] = useState(existingHousehold?.members || []);
   const [addingMember, setAddingMember] = useState(false);
   const [newMember, setNewMember] = useState({
-    name: "", age: "", gender: "female", relation: "wife", caste: "",
+    name: "", age: "", gender: workerData.gender === "female" ? "male" : "female", relation: workerData.gender === "female" ? "husband" : "wife", caste: "",
     maritalStatus: "married", disability: 0, student: false,
     bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false,
     aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal",
@@ -4949,7 +5047,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
     });
     setMembers(p => [...p, { ...newMember }]);
     setAddingMember(false);
-    setNewMember({ name: "", age: "", gender: "female", relation: "wife", caste: "", maritalStatus: "married", disability: 0, student: false, bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false, aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal" });
+    setNewMember({ name: "", age: "", gender: workerData.gender === "female" ? "male" : "female", relation: workerData.gender === "female" ? "husband" : "wife", caste: "", maritalStatus: "married", disability: 0, student: false, bankAccount: false, bankInOwnName: false, pregnant: false, firstChild: false, aadhaarName: "", aadhaarLast4: "", aadhaarAddressState: "West Bengal" });
     setNewMemberDocs({});
   };
 
@@ -5046,7 +5144,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
             <Input label="Marital Status" value={W.maritalStatus} onChange={v => setW("maritalStatus", v)} options={["married","unmarried","widow"]} />
 
 
-            <Input label="Wife's Name" value={W.wifeName || ""} onChange={v => setW("wifeName", v)} placeholder="If married" />
+            <Input label={W.gender === "female" ? "Husband's Name" : "Wife's Name"} value={W.spouseName || W.wifeName || ""} onChange={v => setW("spouseName", v)} placeholder="If married" />
           </div>
 
           {/* Children */}
@@ -5135,8 +5233,8 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
                     description="For age proof — Kanyashree, NSP"
                     scannedData={newMemberDocs.birth}
                     onScanned={(dt, data) => handleNewMemberDocScanned(dt, data)} />
-                : <DocUploadTile docType="bank" label="Bank Passbook" icon="🏦" required={newMember.relation === "wife"}
-                    description={newMember.relation === "wife" ? "Required — own account check" : "Optional"}
+                : <DocUploadTile docType="bank" label="Bank Passbook" icon="🏦" required={newMember.relation === "wife" || newMember.relation === "husband"}
+                    description={newMember.relation === "wife" || newMember.relation === "husband" ? "Required — own account check" : "Optional"}
                     scannedData={newMemberDocs.bank}
                     onScanned={(dt, data) => handleNewMemberDocScanned(dt, data)} />
               }
@@ -5149,7 +5247,7 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
               hint={newMemberDocs.aadhaar?.name ? `AI read: ${newMemberDocs.aadhaar.name}` : ""} />
             <Input label="Age" value={newMember.age} onChange={v => setNewMember(p => ({...p, age: parseInt(v)||0}))} type="number" required />
             <Input label="Relation to Worker" value={newMember.relation} onChange={v => setNewMember(p => ({...p, relation: v}))}
-              options={["wife","daughter","son","father","mother","other"]} />
+              options={["wife","husband","daughter","son","father","mother","other"]} />
             <Input label="Gender" value={newMember.gender} onChange={v => setNewMember(p => ({...p, gender: v}))}
               options={[{value:"male",label:"Male"},{value:"female",label:"Female"}]} />
             <Input label="Caste" value={newMember.caste} onChange={v => setNewMember(p => ({...p, caste: v}))}
@@ -5212,16 +5310,18 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
 }
 
 // ─── SCREEN 3: QUESTIONNAIRE ──────────────────────────────────────────────────
-function QuestionnaireScreen({ household, onComplete, onBack }) {
+function QuestionnaireScreen({ household, existingAnswers, onComplete, onBack }) {
   const worker = household?.worker || {};
   const members = household?.members || [];
-  const [caste, setCaste] = useState(worker.caste || "");
-  const [disability, setDisability] = useState(worker.disability || 0);
-  const [monthlyIncome, setMonthlyIncome] = useState(worker.annualIncome ? String(Math.round(parseInt(worker.annualIncome) / 12)) : "");
-  const [annualIncome, setAnnualIncome] = useState(worker.annualIncome || "");
-  const [rationCard, setRationCard] = useState("");
-  const [district] = useState("Paschim Bardhaman");
-  const [memberData, setMemberData] = useState(members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
+  const ea = existingAnswers || {};
+  const [caste, setCaste] = useState(ea.caste || worker.caste || "");
+  const [disability, setDisability] = useState(ea.disability || worker.disability || 0);
+  const [monthlyIncome, setMonthlyIncome] = useState(ea.monthlyIncome ? String(ea.monthlyIncome) : worker.annualIncome ? String(Math.round(parseInt(worker.annualIncome) / 12)) : "");
+  const [annualIncome, setAnnualIncome] = useState(ea.annualIncome ? String(ea.annualIncome) : worker.annualIncome || "");
+  const [rationCard, setRationCard] = useState(ea.rationCard || "");
+  const [state, setState] = useState(ea.state || worker.aadhaarAddressState || "");
+  const [district, setDistrict] = useState(ea.district || "");
+  const [memberData, setMemberData] = useState(ea.memberData || members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
   const handleMonthlyChange = (v) => { setMonthlyIncome(v); if (v) setAnnualIncome(String(parseInt(v) * 12 || 0)); else setAnnualIncome(""); };
   const handleAnnualChange = (v) => { setAnnualIncome(v); if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0)); else setMonthlyIncome(""); };
   const updateMember = (i, key, val) => setMemberData(prev => prev.map((m, j) => j === i ? { ...m, [key]: val } : m));
@@ -5230,9 +5330,12 @@ function QuestionnaireScreen({ household, onComplete, onBack }) {
       {onBack && <BackButton onClick={onBack} label="Back to Household" />}
       <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>Eligibility Questions</h2>
       <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 20 }}>Fill details for worker and each family member</p>
-      <Card style={{ background: "#EFF8F3", marginBottom: 16 }}>
-        <div style={{ fontSize: 13, color: COLORS.green, fontWeight: 700 }}>Location (Pre-filled)</div>
-        <div style={{ fontSize: 14, color: COLORS.navy, marginTop: 4 }}>West Bengal - {district}</div>
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: COLORS.navy, fontWeight: 700, marginBottom: 10 }}>📍 Location</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+          <Input label="State" value={state} onChange={setState} options={["Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh","Uttarakhand","West Bengal"]} required />
+          <Input label="District" value={district} onChange={setDistrict} placeholder="e.g. Paschim Bardhaman" required />
+        </div>
       </Card>
       <Card style={{ marginBottom: 16, background: "#F9F5FF" }}>
         <div style={{ fontWeight: 800, color: COLORS.navy, marginBottom: 12, fontSize: 15 }}>Worker: {worker.name || "Primary Worker"}</div>
@@ -5266,9 +5369,9 @@ function QuestionnaireScreen({ household, onComplete, onBack }) {
         </div>
       )}
       <Button
-        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability, memberData })}
+        onClick={() => onComplete({ monthlyIncome: parseInt(monthlyIncome)||0, annualIncome: parseInt(annualIncome)||0, rationCard, caste, disability, memberData, state, district })}
         variant="primary" size="lg"
-        disabled={!monthlyIncome || !annualIncome || !rationCard || !caste}
+        disabled={!monthlyIncome || !annualIncome || !rationCard || !caste || !state || !district}
       >
         Find Eligible Schemes
       </Button>
@@ -6583,6 +6686,8 @@ export default function JanSetuApp() {
   // Global document vault — upload once, reuse anywhere across all doc applications
   const [docVault, setDocVault] = useState({}); // sharedKey -> { name, size, type, preview }
   const addToVault = (sharedKey, fileData) => setDocVault(prev => ({ ...prev, [sharedKey]: fileData }));
+  // Persist questionnaire answers so going back doesn't lose data
+  const [questionnaireData, setQuestionnaireData] = useState(null);
 
   const SCHEME_STEPS = ["Verify", "Intent", "Household", "Questions", "Doc Health", "Schemes", "Apply"];
   const schemeStepMap = { verify: 0, intent: 1, household: 2, questionnaire: 3, dochealth: 4, schemes: 5, application: 6 };
@@ -6608,6 +6713,7 @@ export default function JanSetuApp() {
   };
 
   const handleQuestionnaire = (q) => {
+    setQuestionnaireData(q); // Persist for back navigation
     const fullHousehold = { ...household, ...q };
     setHousehold(fullHousehold);
     setScreen("dochealth");
@@ -6720,6 +6826,7 @@ export default function JanSetuApp() {
               {screen === "questionnaire" && (
                 <QuestionnaireScreen
                   household={household}
+                  existingAnswers={questionnaireData}
                   onComplete={handleQuestionnaire}
                   onBack={() => setScreen("household")}
                 />
