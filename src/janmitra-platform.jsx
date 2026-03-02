@@ -386,6 +386,14 @@ function checkPersonEligibility(scheme, person, household) {
     reasons.push("West Bengal resident ✓");
   }
 
+  // ── hasMarriageDaughter — worker must have at least one daughter member ──────
+  if (e.hasMarriageDaughter) {
+    const members = household?.members || [];
+    const hasDaughter = members.some(m => m.relation === "daughter" && (parseInt(m.age) || 0) >= 18);
+    if (!hasDaughter) failures.push("Requires daughter aged ≥18");
+    else reasons.push("Has eligible daughter ✓");
+  }
+
   return { eligible: failures.length === 0, reasons, failures };
 }
 
@@ -428,6 +436,26 @@ function getEligibleSchemes(household) {
     const norm = normPerson(person, relation);
     const allSchemes = [...SCHEMES, ...NEW_SCHEMES];
     allSchemes.forEach(scheme => {
+      // ── applies_to filter: only check schemes that match this person's role ──
+      const at = scheme.applies_to || [];
+      const rel = (relation || "").toLowerCase();
+      const isWorker = rel === "worker";
+      const isFemale = norm.gender === "female";
+      const matchesAppliesTo = at.some(a => {
+        if (a === "any") return true;
+        if (a === "worker" && isWorker) return true;
+        if (a === "family" && !isWorker) return true;
+        if (a === "wife" && rel === "wife") return true;
+        if (a === "husband" && rel === "husband") return true;
+        if (a === "daughter" && rel === "daughter") return true;
+        if (a === "son" && rel === "son") return true;
+        if (a === "parent" && (rel === "father" || rel === "mother")) return true;
+        if (a === "female" && isFemale) return true;
+        if (a === "student" && norm.student) return true;
+        return false;
+      });
+      if (!matchesAppliesTo) return; // Skip — scheme not for this person type
+
       const { eligible, reasons, failures } = checkPersonEligibility(scheme, norm, householdForCheck);
       if (eligible) results.push({ scheme, person: norm, reasons });
     });
@@ -1670,16 +1698,43 @@ function _openDoc(html) {
   iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;border:none;z-index:99999;background:#fff";
   document.body.appendChild(iframe);
 
+  // Inject toolbar + editable content
+  const toolbarHtml = `
+    <div id="_jansetu_toolbar" style="position:fixed;top:0;left:0;right:0;background:#0D2240;padding:8px 16px;display:flex;gap:10px;align-items:center;z-index:100001;box-shadow:0 2px 12px rgba(0,0,0,0.3)">
+      <button onclick="parent.document.getElementById('_jan-setu_print_frame').remove()" style="background:#E8690B;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✕ Close</button>
+      <button onclick="window.print()" style="background:#1A7A4A;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">🖨️ Print</button>
+      <button onclick="window.print()" style="background:#2CA865;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">💾 Save as PDF</button>
+      <button onclick="toggleEdit()" id="_editBtn" style="background:#F5A043;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer">✏️ Edit</button>
+      <span style="color:rgba(255,255,255,0.5);font-size:11px;margin-left:auto">Jan Setu · Click "Save as PDF" → choose "Save as PDF" in print dialog</span>
+    </div>
+    <script>
+      var editing = false;
+      function toggleEdit() {
+        editing = !editing;
+        var content = document.getElementById('_jansetu_content');
+        content.contentEditable = editing;
+        content.style.outline = editing ? '2px dashed #E8690B' : 'none';
+        document.getElementById('_editBtn').textContent = editing ? '✅ Done Editing' : '✏️ Edit';
+        document.getElementById('_editBtn').style.background = editing ? '#1A7A4A' : '#F5A043';
+      }
+    </script>
+  `;
+
+  // Wrap content in editable div and add toolbar
+  const modifiedHtml = html.replace('</body>', `
+    <style>
+      @media print { #_jansetu_toolbar { display: none !important; } #_jansetu_content { margin-top: 0 !important; } }
+      #_jansetu_content { margin-top: 56px; }
+    </style>
+    </body>`
+  ).replace(/<body[^>]*>/, (match) => `${match}${toolbarHtml}<div id="_jansetu_content">`
+  ).replace('</body>', '</div></body>');
+
   // Write content into iframe
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write(html);
+  doc.write(modifiedHtml);
   doc.close();
-
-  // Add a close button to the iframe content
-  const closeBtn = iframe.contentDocument.createElement("div");
-  closeBtn.innerHTML = '<button onclick="parent.document.getElementById(\'_jan-setu_print_frame\').remove()" style="position:fixed;top:12px;left:12px;background:#E8690B;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;z-index:100000">✕ Close</button>';
-  iframe.contentDocument.body.appendChild(closeBtn);
 }
 
 // ─── DOC HEALTH SCREEN ────────────────────────────────────────────────────────
@@ -2161,7 +2216,7 @@ function fileToBase64(file) {
 
 const DOC_PROMPTS = {
   aadhaar: `Extract from this Indian Aadhaar card. Return ONLY JSON:
-{"name":"full name as printed","dob":"DD/MM/YYYY","gender":"Male/Female/Other","aadhaarNumber":"12 digits no spaces","aadhaarLast4":"last 4 digits","address":"full address","addressState":"state from address","pincode":"6 digits","fatherOrHusbandName":"if shown else empty"}`,
+{"name":"full name as printed","dob":"DD/MM/YYYY","gender":"Male/Female/Other","aadhaarNumber":"12 digits no spaces","aadhaarLast4":"last 4 digits","address":"full address","addressState":"state from address","addressDistrict":"district from address","pincode":"6 digits","fatherOrHusbandName":"if shown else empty"}`,
 
   bank: `Extract from this Indian bank passbook or cheque leaf. Return ONLY JSON:
 {"accountHolderName":"name as printed","accountNumber":"full account number","ifsc":"IFSC code","bankName":"bank name","branchName":"branch name","accountType":"Savings/Current/Jan Dhan"}`,
@@ -2506,7 +2561,7 @@ function QuickAadhaarScan({ onFilled }) {
   const fileRef = useRef();
 
   const PROMPT = `You are reading an Indian Aadhaar card image. Extract all visible information and return ONLY a JSON object:
-{"name":"Full name as printed","dob":"DD/MM/YYYY","gender":"Male/Female/Other","aadhaarNumber":"12-digit no spaces","aadhaarLast4":"last 4 digits","address":"full address","addressState":"state from address","pincode":"6-digit","fatherName":"father or husband name or empty","caste":"SC or ST or OBC-A or OBC-B or General or empty if not on card"}
+{"name":"Full name as printed","dob":"DD/MM/YYYY","gender":"Male/Female/Other","aadhaarNumber":"12-digit no spaces","aadhaarLast4":"last 4 digits","address":"full address","addressState":"state from address","addressDistrict":"district from address","pincode":"6-digit","fatherName":"father or husband name or empty","caste":"SC or ST or OBC-A or OBC-B or General or empty if not on card"}
 Return ONLY the JSON.`;
 
   const handleFile = async (e) => {
@@ -4946,12 +5001,14 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
     if (docType === "aadhaar") {
       setWorkerData(p => ({
         ...p,
-        name: p.name || data.name || "",
-        aadhaarName: data.name || p.aadhaarName,
-        aadhaarLast4: data.aadhaarLast4 || p.aadhaarLast4,
-        aadhaarAddressState: data.addressState || p.aadhaarAddressState,
+        // Always override with new scan data — new scan takes priority over old
+        name: data.name || "",
+        aadhaarName: data.name || "",
+        aadhaarLast4: data.aadhaarLast4 || "",
+        aadhaarAddressState: data.addressState || "",
+        aadhaarAddressDistrict: data.addressDistrict || "",
         gender: data.gender ? data.gender.toLowerCase() : p.gender,
-        age: p.age || (data.dob ? String(new Date().getFullYear() - parseInt((data.dob || "").split("/")[2]) || "") : ""),
+        age: data.dob ? String(new Date().getFullYear() - parseInt((data.dob || "").split("/")[2]) || "") : "",
         aadhaar: true,
       }));
     }
@@ -5023,10 +5080,10 @@ function HouseholdScreen({ worker, onComplete, onBack, existingHousehold }) {
     if (key === "aadhaar" && data) {
       setNewMember(p => ({
         ...p,
-        name: p.name || data.name || "",
-        aadhaarName: data.name || p.aadhaarName,
+        name: data.name || "",
+        aadhaarName: data.name || "",
         aadhaarLast4: data.aadhaarLast4 || "",
-        age: p.age || (data.dob ? String(new Date().getFullYear() - parseInt((data.dob || "").split("/")[2])) : ""),
+        age: data.dob ? String(new Date().getFullYear() - parseInt((data.dob || "").split("/")[2])) : "",
         gender: data.gender ? data.gender.toLowerCase() : p.gender,
       }));
     }
@@ -5320,7 +5377,7 @@ function QuestionnaireScreen({ household, existingAnswers, onComplete, onBack })
   const [annualIncome, setAnnualIncome] = useState(ea.annualIncome ? String(ea.annualIncome) : worker.annualIncome || "");
   const [rationCard, setRationCard] = useState(ea.rationCard || "");
   const [state, setState] = useState(ea.state || worker.aadhaarAddressState || "");
-  const [district, setDistrict] = useState(ea.district || "");
+  const [district, setDistrict] = useState(ea.district || worker.aadhaarAddressDistrict || "");
   const [memberData, setMemberData] = useState(ea.memberData || members.map(m => ({ caste: m.caste || "", disability: m.disability || 0, student: m.student || false, bankAccount: m.bankAccount || false, bankInOwnName: m.bankInOwnName || false, pregnant: m.pregnant || false, firstChild: m.firstChild || false })));
   const handleMonthlyChange = (v) => { setMonthlyIncome(v); if (v) setAnnualIncome(String(parseInt(v) * 12 || 0)); else setAnnualIncome(""); };
   const handleAnnualChange = (v) => { setAnnualIncome(v); if (v) setMonthlyIncome(String(Math.round(parseInt(v) / 12) || 0)); else setMonthlyIncome(""); };
@@ -5471,7 +5528,7 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
     "Aadhaar":                  { vaultKeys: ["aadhaar_front"], scanKey: "aadhaar", label: "Aadhaar scan" },
     "Aadhaar Card":             { vaultKeys: ["aadhaar_front"], scanKey: "aadhaar", label: "Aadhaar scan" },
     "Worker's Aadhaar":         { vaultKeys: ["aadhaar_front","aadhaar_head"], scanKey: "aadhaar", label: "Worker Aadhaar" },
-    "Daughter's Aadhaar":       { vaultKeys: ["aadhaar_member2","aadhaar_member3"], scanKey: null, label: "Family Aadhaar" },
+    "Daughter's Aadhaar":       { vaultKeys: [], scanKey: null, label: "Daughter's Aadhaar" },
     "Bank Passbook":            { vaultKeys: ["bank_passbook"], scanKey: "bank", label: "Bank passbook" },
     "Caste Certificate":        { vaultKeys: ["father_caste"], scanKey: "caste", label: "Caste certificate" },
     "Income Certificate":       { vaultKeys: [], scanKey: "income", label: "Income certificate" },
@@ -5520,14 +5577,6 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
     // Check scannedDocs (AI scans from HouseholdScreen)
     if (mapping.scanKey && scannedDocs[mapping.scanKey]) {
       return { source: "scan", key: mapping.scanKey, data: scannedDocs[mapping.scanKey], label: mapping.label };
-    }
-
-    // For member-specific docs, check member scans
-    if (docName.includes("Daughter") || docName.includes("girl")) {
-      const memberKeys = Object.keys(scannedDocs).filter(k => k.startsWith("member_") && k.includes("aadhaar"));
-      if (memberKeys.length > 0) {
-        return { source: "scan", key: memberKeys[0], data: scannedDocs[memberKeys[0]], label: "Family member scan" };
-      }
     }
 
     return null;
@@ -5674,14 +5723,69 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
       })}
 
       <div style={{ marginTop: 6, marginBottom: 20 }}>
-        <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10 }}>📋 Missing Document? Create it:</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {DOC_SERVICES.map(ds => (
-            <button key={ds.id} style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${COLORS.saffron}`, background: "transparent", cursor: "pointer", fontSize: 12, fontWeight: 700, color: COLORS.saffron }}>
-              {ds.icon} {ds.name}
-            </button>
-          ))}
-        </div>
+        {(() => {
+          const pendingDocs = result.scheme.docs.filter(d => docs[d] !== "uploaded");
+          if (pendingDocs.length === 0) return null;
+
+          // Map doc names to create-able services
+          const DOC_CREATE_MAP = {
+            "Aadhaar": { id: "aadhaar", icon: "🪪", name: "Aadhaar Card", action: "apply_aadhaar" },
+            "Aadhaar Card": { id: "aadhaar", icon: "🪪", name: "Aadhaar Card", action: "apply_aadhaar" },
+            "Worker's Aadhaar": { id: "aadhaar", icon: "🪪", name: "Aadhaar Card", action: "apply_aadhaar" },
+            "Daughter's Aadhaar": { id: "aadhaar", icon: "🪪", name: "Aadhaar Card", action: "apply_aadhaar" },
+            "Caste Certificate": { id: "caste_cert", icon: "📜", name: "Caste Certificate", action: "edistrict" },
+            "Income Certificate": { id: "income_cert", icon: "📋", name: "Income Certificate", action: "edistrict" },
+            "Income Certificate (≤ ₹6,500/month)": { id: "income_cert", icon: "📋", name: "Income Certificate", action: "edistrict" },
+            "Bank Passbook": { id: "bank", icon: "🏦", name: "Open Bank Account", action: "jan_dhan" },
+            "Bank Account (girl's own)": { id: "bank", icon: "🏦", name: "Open Girl's Account", action: "jan_dhan" },
+            "Bank Account (mother's own)": { id: "bank", icon: "🏦", name: "Open Mother's Account", action: "jan_dhan" },
+            "Bank Account (student's own)": { id: "bank", icon: "🏦", name: "Open Student Account", action: "jan_dhan" },
+            "Ration Card": { id: "ration_card", icon: "🗂️", name: "Ration Card", action: "khadya_sathi" },
+            "WB Domicile / Address Proof": { id: "address", icon: "📍", name: "Address Proof", action: "employer_letter" },
+            "Address Proof": { id: "address", icon: "📍", name: "Address Proof", action: "employer_letter" },
+            "Age Proof": { id: "age_proof", icon: "📅", name: "Age Proof", action: "birth_cert" },
+            "Age Proof (daughter ≥18)": { id: "age_proof", icon: "📅", name: "Age Proof", action: "birth_cert" },
+            "Voter ID": { id: "voter", icon: "🗳️", name: "Voter ID", action: "nvsp" },
+            "Disability Certificate": { id: "disability", icon: "♿", name: "Disability Certificate", action: "cmo" },
+            "Disability Certificate from Govt Hospital (CMO)": { id: "disability", icon: "♿", name: "Disability Certificate", action: "cmo" },
+          };
+
+          const createableServices = [];
+          const seenIds = new Set();
+          pendingDocs.forEach(d => {
+            const svc = DOC_CREATE_MAP[d];
+            if (svc && !seenIds.has(svc.id)) {
+              seenIds.add(svc.id);
+              createableServices.push({ ...svc, forDoc: d });
+            }
+          });
+
+          if (createableServices.length === 0) return null;
+
+          const actionUrls = {
+            edistrict: "https://edistrict.wb.gov.in",
+            khadya_sathi: "https://khadyasathi.gov.in",
+            nvsp: "https://www.nvsp.in",
+            apply_aadhaar: "https://myaadhaar.uidai.gov.in",
+          };
+
+          return (
+            <div>
+              <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 10 }}>📋 Missing for this scheme? Create it:</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {createableServices.map(svc => (
+                  <button key={svc.id}
+                    onClick={() => {
+                      if (actionUrls[svc.action]) window.open(actionUrls[svc.action], "_blank");
+                    }}
+                    style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${COLORS.saffron}`, background: "transparent", cursor: "pointer", fontSize: 12, fontWeight: 700, color: COLORS.saffron }}>
+                    {svc.icon} {svc.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <Button onClick={handleApply} variant="primary" size="lg">
