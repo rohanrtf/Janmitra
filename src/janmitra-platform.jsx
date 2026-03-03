@@ -7070,6 +7070,215 @@ function AdminDashboard({ applications }) {
   );
 }
 
+// ─── SCHEME DIRECTORY ─────────────────────────────────────────────────────────
+function SchemeDirectory({ lang }) {
+  const [stateFilter, setStateFilter] = useState("All");
+  const [selectedState, setSelectedState] = useState("West Bengal");
+  const [expandedScheme, setExpandedScheme] = useState(null);
+  const [search, setSearch] = useState("");
+
+  const indianStates = ["West Bengal", "Jharkhand", "Bihar", "Odisha", "Uttar Pradesh", "Madhya Pradesh", "Chhattisgarh", "Rajasthan", "Assam", "Tamil Nadu", "Andhra Pradesh", "Telangana", "Karnataka", "Maharashtra", "Gujarat", "Punjab", "Haryana", "Kerala", "Delhi"];
+
+  const allSchemes = [...SCHEMES, ...NEW_SCHEMES];
+
+  // Filter schemes
+  const filtered = allSchemes.filter(s => {
+    if (stateFilter === "Central" && s.category !== "Central") return false;
+    if (stateFilter === "State" && s.category === "Central") return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (s.name || "").toLowerCase().includes(q) || (s.fullName || "").toLowerCase().includes(q) || (s.type || "").toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  // Group: Central first, then state
+  const centralSchemes = filtered.filter(s => s.category === "Central");
+  const stateSchemes = filtered.filter(s => s.category !== "Central");
+
+  const descKey = lang === "bn" ? "description_bn" : lang === "hi" ? "description_hi" : "description_en";
+
+  const SchemeCard = ({ scheme }) => {
+    const isOpen = expandedScheme === scheme.id;
+    const eligEntries = Object.entries(scheme.eligibility || {});
+
+    // Human-readable eligibility
+    const eligText = (e) => {
+      const items = [];
+      if (e.minAge || e.maxAge) items.push(`Age: ${e.minAge || "—"}–${e.maxAge || "—"} years`);
+      if (e.gender) items.push(`Gender: ${e.gender === "female" ? "Female only" : "Male only"}`);
+      if (e.unorganisedWorker) items.push("Unorganised worker");
+      if (e.stateWB) items.push("West Bengal resident");
+      if (e.caste && e.caste.length) items.push(`Caste: ${e.caste.join(", ")}`);
+      if (e.casteInList && e.casteInList.length) items.push(`Caste: ${e.casteInList.join(", ")}`);
+      if (e.student) items.push("Must be a student");
+      if (e.unmarried) items.push("Unmarried");
+      if (e.maritalStatus) items.push(`Marital status: ${e.maritalStatus}`);
+      if (e.disability) items.push("Person with disability");
+      if (e.disabilityMinPercent) items.push(`Disability: ≥${e.disabilityMinPercent}%`);
+      if (e.monthlyIncomeMax) items.push(`Family income: ≤ ₹${e.monthlyIncomeMax.toLocaleString("en-IN")}/month`);
+      if (e.annualIncomeMax) items.push(`Annual income: ≤ ₹${e.annualIncomeMax.toLocaleString("en-IN")}`);
+      if (e.annualFamilyIncomeMax) items.push(`Annual family income: ≤ ₹${e.annualFamilyIncomeMax.toLocaleString("en-IN")}`);
+      if (e.hasMarriageDaughter) items.push("Has daughter aged ≥18 (for marriage)");
+      if (e.farmer) items.push("Must be a farmer");
+      if (e.requiresBankAccount) items.push("Bank account required");
+      if (e.pregnant) items.push("Pregnant woman");
+      if (e.firstChild) items.push("First child");
+      return items;
+    };
+
+    const appliesToLabel = (at) => {
+      const labels = { worker: "Worker", family: "Family Members", wife: "Wife", husband: "Husband", daughter: "Daughter", son: "Son", parent: "Parents", female: "Women/Girls", student: "Students", any: "Anyone in household" };
+      return (at || []).map(a => labels[a] || a).join(", ");
+    };
+
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div onClick={() => setExpandedScheme(isOpen ? null : scheme.id)}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: isOpen ? "#F4F6F8" : "#fff", border: "1px solid #E8EDF3", borderRadius: isOpen ? "12px 12px 0 0" : 12, cursor: "pointer", transition: "all 0.15s" }}>
+          <span style={{ fontSize: 24 }}>{scheme.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 14 }}>{scheme.name}</div>
+            <div style={{ fontSize: 11, color: "#7A8A9A" }}>{scheme.fullName}</div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontWeight: 800, color: COLORS.green, fontSize: 13 }}>{scheme.benefit}</div>
+            <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: scheme.category === "Central" ? "#EAF0FA" : "#E8F5EE", color: scheme.category === "Central" ? COLORS.navy : COLORS.green }}>{scheme.category}</span>
+          </div>
+        </div>
+        {isOpen && (
+          <div style={{ border: "1px solid #E8EDF3", borderTop: "none", borderRadius: "0 0 12px 12px", padding: 16, background: "#FAFBFD" }}>
+            {/* Description */}
+            <div style={{ fontSize: 13, color: COLORS.slate, marginBottom: 14, lineHeight: 1.6 }}>
+              {scheme[descKey] || scheme.description_en || ""}
+            </div>
+
+            {/* Who is it for */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, letterSpacing: 0.5, marginBottom: 6 }}>WHO IS IT FOR</div>
+              <div style={{ fontSize: 12, color: COLORS.slate, background: "#EAF0FA", borderRadius: 8, padding: "8px 12px" }}>
+                {appliesToLabel(scheme.applies_to)}
+              </div>
+            </div>
+
+            {/* Eligibility */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, letterSpacing: 0.5, marginBottom: 6 }}>ELIGIBILITY</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {eligText(scheme.eligibility).map((item, i) => (
+                  <span key={i} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 8, background: "#E8F5EE", color: COLORS.green }}>✓ {item}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Documents needed */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy, letterSpacing: 0.5, marginBottom: 6 }}>DOCUMENTS NEEDED</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {(scheme.docs || []).map((d, i) => (
+                  <span key={i} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 6, background: "#F0F4F8", color: COLORS.slate }}>📎 {d}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Difficulty */}
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy }}>Difficulty: </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: scheme.difficultyLabel === "Easy" ? COLORS.green : scheme.difficultyLabel === "Medium" ? COLORS.amber : COLORS.red }}>
+                  {scheme.difficultyLabel === "Easy" ? "🟢" : scheme.difficultyLabel === "Medium" ? "🟡" : "🔴"} {scheme.difficultyLabel}
+                </span>
+              </div>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.navy }}>Type: </span>
+                <span style={{ fontSize: 12, color: COLORS.slate }}>{scheme.type}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 20, color: COLORS.navy, marginBottom: 4 }}>📋 Scheme Directory</h2>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Browse all government schemes — no worker verification needed</p>
+
+      {/* Search */}
+      <div style={{ marginBottom: 12 }}>
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 Search schemes..."
+          style={{ width: "100%", padding: "10px 14px", border: "1.5px solid #D0D8E4", borderRadius: 10, fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+        />
+      </div>
+
+      {/* Category filter */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        {[["All", `All (${allSchemes.length})`], ["Central", `🇮🇳 Central (${allSchemes.filter(s => s.category === "Central").length})`], ["State", `🏛️ State (${allSchemes.filter(s => s.category !== "Central").length})`]].map(([key, label]) => (
+          <button key={key} onClick={() => setStateFilter(key)}
+            style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, fontFamily: "inherit",
+              background: stateFilter === key ? COLORS.navy : "#F0F4F8", color: stateFilter === key ? "#fff" : COLORS.slate }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* State dropdown */}
+      {(stateFilter === "All" || stateFilter === "State") && (
+        <div style={{ marginBottom: 16 }}>
+          <select value={selectedState} onChange={e => setSelectedState(e.target.value)}
+            style={{ padding: "8px 12px", border: "1.5px solid #D0D8E4", borderRadius: 8, fontSize: 13, fontFamily: "inherit", background: "#F8FAFC", color: COLORS.navy, fontWeight: 600, cursor: "pointer" }}>
+            {indianStates.map(s => (
+              <option key={s} value={s}>{s}{s !== "West Bengal" ? " (coming soon)" : ""}</option>
+            ))}
+          </select>
+          {selectedState !== "West Bengal" && (
+            <span style={{ marginLeft: 10, fontSize: 11, color: COLORS.amber, fontWeight: 600 }}>⚠️ Currently only West Bengal schemes are available. More states coming soon.</span>
+          )}
+        </div>
+      )}
+
+      {/* Scheme count */}
+      <div style={{ fontSize: 12, color: "#7A8A9A", marginBottom: 12 }}>
+        Showing {filtered.length} scheme{filtered.length !== 1 ? "s" : ""}{search ? ` matching "${search}"` : ""}
+      </div>
+
+      {/* Central schemes */}
+      {(stateFilter === "All" || stateFilter === "Central") && centralSchemes.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 18 }}>🇮🇳</span>
+            <span style={{ fontWeight: 800, color: COLORS.navy, fontSize: 15 }}>Central Government Schemes</span>
+            <Badge label={centralSchemes.length} color={COLORS.navy} />
+          </div>
+          {centralSchemes.map(s => <SchemeCard key={s.id} scheme={s} />)}
+        </div>
+      )}
+
+      {/* State schemes */}
+      {(stateFilter === "All" || stateFilter === "State") && stateSchemes.length > 0 && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 18 }}>🏛️</span>
+            <span style={{ fontWeight: 800, color: COLORS.navy, fontSize: 15 }}>{selectedState} Schemes</span>
+            <Badge label={stateSchemes.length} color={COLORS.green} />
+          </div>
+          {stateSchemes.map(s => <SchemeCard key={s.id} scheme={s} />)}
+        </div>
+      )}
+
+      {filtered.length === 0 && (
+        <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🔍</div>
+          No schemes found{search ? ` matching "${search}"` : ""}.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function JanSetuApp() {
   const [screen, setScreen] = useState("verify");
@@ -7162,7 +7371,7 @@ export default function JanSetuApp() {
 
         {/* TABS */}
         <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-          {[["worker","👷 Worker"],["agent","🗂️ Agent"],["docs","📄 Docs"],["admin","📊 Admin"]].map(([t, label]) => (
+          {[["worker","👷 Worker"],["agent","🗂️ Agent"],["docs","📄 Docs"],["admin","📊 Admin"],["schemes","📋 Schemes"]].map(([t, label]) => (
             <button key={t} onClick={() => setActiveTab(t)} style={{
               flex: 1, padding: "10px 0", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
               background: activeTab === t ? "rgba(232,105,11,0.2)" : "transparent",
@@ -7283,6 +7492,9 @@ export default function JanSetuApp() {
                 onBack={null}
               />
             )
+          )}
+          {activeTab === "schemes" && (
+            <SchemeDirectory lang={lang} />
           )}
           {activeTab === "admin" && (
             <AdminDashboard applications={applications} />
