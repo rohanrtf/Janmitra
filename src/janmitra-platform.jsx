@@ -6467,6 +6467,16 @@ function AgentConsole({ applications, onUpdateStatus }) {
 
   // ── OTP Login Screen ──
   if (!agentLoggedIn) {
+    const handleSendOTP = () => {
+      if (agentName.trim() && agentPhone.replace(/\D/g,"").length >= 10) {
+        setOtpSent(true);
+      }
+    };
+    const handleVerifyOTP = () => {
+      if (otpValue.replace(/\D/g,"").length >= 4) {
+        setAgentLoggedIn(true);
+      }
+    };
     return (
       <div style={{ textAlign: "center", padding: "40px 20px" }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
@@ -6476,11 +6486,14 @@ function AgentConsole({ applications, onUpdateStatus }) {
           {!otpSent ? (
             <>
               <Input label="Agent Name" value={agentName} onChange={setAgentName} placeholder="Full name" />
-              <Input label="Mobile Number" value={agentPhone} onChange={setAgentPhone} placeholder="10-digit mobile" type="tel" />
+              <Input label="Mobile Number" value={agentPhone} onChange={setAgentPhone} placeholder="10-digit mobile" />
               <div style={{ marginTop: 16 }}>
-                <Button onClick={() => { if (agentPhone.length >= 10) setOtpSent(true); }} variant="primary" size="lg" disabled={agentPhone.length < 10 || !agentName}>
+                <button onClick={handleSendOTP}
+                  style={{ width: "100%", padding: "12px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, fontFamily: "inherit",
+                    background: (agentName.trim() && agentPhone.length >= 10) ? COLORS.saffron : "#D0D8E4",
+                    color: (agentName.trim() && agentPhone.length >= 10) ? "#fff" : "#999" }}>
                   📲 Send OTP
-                </Button>
+                </button>
               </div>
             </>
           ) : (
@@ -6488,13 +6501,16 @@ function AgentConsole({ applications, onUpdateStatus }) {
               <div style={{ background: COLORS.greenPale, borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 13, color: COLORS.green }}>
                 ✅ OTP sent to {agentPhone}
               </div>
-              <Input label="Enter OTP" value={otpValue} onChange={setOtpValue} placeholder="6-digit OTP" type="number" />
+              <Input label="Enter OTP" value={otpValue} onChange={setOtpValue} placeholder="Enter any 4+ digit OTP" />
               <div style={{ marginTop: 16 }}>
-                <Button onClick={() => { if (otpValue.length >= 4) setAgentLoggedIn(true); }} variant="primary" size="lg" disabled={otpValue.length < 4}>
+                <button onClick={handleVerifyOTP}
+                  style={{ width: "100%", padding: "12px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, fontFamily: "inherit",
+                    background: otpValue.length >= 4 ? COLORS.saffron : "#D0D8E4",
+                    color: otpValue.length >= 4 ? "#fff" : "#999" }}>
                   🔓 Verify & Login
-                </Button>
+                </button>
               </div>
-              <button onClick={() => setOtpSent(false)} style={{ marginTop: 12, background: "none", border: "none", color: COLORS.saffron, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+              <button onClick={() => { setOtpSent(false); setOtpValue(""); }} style={{ marginTop: 12, background: "none", border: "none", color: COLORS.saffron, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                 ← Change number
               </button>
             </>
