@@ -6448,7 +6448,7 @@ function SubmissionConsole({ app, onBack, onSubmitted }) {
 }
 
 // ─── AGENT CONSOLE ────────────────────────────────────────────────────────────
-function AgentConsole({ applications, onUpdateStatus }) {
+function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
   // ── OTP Login Gate ──
   const [agentLoggedIn, setAgentLoggedIn] = useState(false);
   const [agentPhone, setAgentPhone] = useState("");
@@ -6457,7 +6457,7 @@ function AgentConsole({ applications, onUpdateStatus }) {
   const [agentName, setAgentName] = useState("");
 
   // ── Agent Portal State ──
-  const [agentTab, setAgentTab] = useState("pending"); // pending | processed | benefits
+  const [agentTab, setAgentTab] = useState("pending"); // pending | processed | benefits | saved
   const [selected, setSelected] = useState(null);
   const [submitting, setSubmitting] = useState(null);
   const [langMsg, setLangMsg] = useState("bn");
@@ -6814,6 +6814,7 @@ function AgentConsole({ applications, onUpdateStatus }) {
         {tabBtn("pending", "Pending", "⏳", pendingApps.length)}
         {tabBtn("processed", "Processed", "📤", processedApps.length)}
         {tabBtn("benefits", "Benefits", "🏆", completedApps.length)}
+        {tabBtn("saved", "Saved", "💾", Object.keys(loadSessions()).length)}
       </div>
 
       <div style={{ background: "#fff", borderRadius: "0 0 12px 12px", padding: 16, border: "1px solid #E8EDF3", borderTop: "none", minHeight: 200 }}>
@@ -6881,6 +6882,73 @@ function AgentConsole({ applications, onUpdateStatus }) {
 
         {/* ── BENEFITS TAB ── */}
         {agentTab === "benefits" && <BenefitsSummary />}
+
+        {/* ── SAVED WORKERS TAB ── */}
+        {agentTab === "saved" && (() => {
+          const sessions = loadSessions();
+          const sessionList = Object.entries(sessions).sort((a,b) => (b[1].lastUpdated || "").localeCompare(a[1].lastUpdated || ""));
+
+          if (sessionList.length === 0) {
+            return (
+              <div style={{ textAlign: "center", padding: 40, color: "#7A8A9A" }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>💾</div>
+                No saved worker sessions. Progress is auto-saved as workers go through the flow.
+              </div>
+            );
+          }
+
+          const stepLabels = { verify: "Verification", intent: "Intent Selection", household: "Household", questionnaire: "Questionnaire", dochealth: "Doc Health", schemes: "Scheme Matching", application: "Application", docmode: "Doc Mode" };
+
+          return (
+            <div>
+              <div style={{ fontSize: 13, color: "#7A8A9A", marginBottom: 16 }}>Worker progress is auto-saved. Resume any incomplete session below.</div>
+              {sessionList.map(([phone, sess]) => {
+                const w = sess.worker || {};
+                const step = stepLabels[sess.screen] || sess.screen || "Unknown";
+                const memberCount = sess.household?.members?.length || 0;
+                const hasQuestionnaire = !!sess.questionnaireData;
+                const updated = sess.lastUpdated ? new Date(sess.lastUpdated).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+
+                return (
+                  <Card key={phone} style={{ marginBottom: 10, padding: 0, overflow: "hidden" }}>
+                    <div style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div>
+                          <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 15 }}>👤 {w.name || "Unknown Worker"}</div>
+                          <div style={{ fontSize: 12, color: "#7A8A9A", marginTop: 2 }}>📱 {phone} {w.aadhaarLast4 ? `· Aadhaar: XXXX-${w.aadhaarLast4}` : ""}</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 10, color: "#7A8A9A" }}>Last saved</div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: COLORS.slate }}>{updated}</div>
+                        </div>
+                      </div>
+
+                      {/* Progress indicators */}
+                      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: "#EAF0FA", color: COLORS.navy }}>📍 Step: {step}</span>
+                        {memberCount > 0 && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: "#E8F5EE", color: COLORS.green }}>👨‍👩‍👧 {memberCount} member{memberCount > 1 ? "s" : ""}</span>}
+                        {hasQuestionnaire && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: "#E8F5EE", color: COLORS.green }}>📋 Questionnaire done</span>}
+                        {(sess.docVaultKeys || []).length > 0 && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: "#E8F5EE", color: COLORS.green }}>📎 {sess.docVaultKeys.length} doc{sess.docVaultKeys.length > 1 ? "s" : ""}</span>}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                        <button onClick={() => { if (onResumeWorker) onResumeWorker(sess); }}
+                          style={{ flex: 1, padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "inherit", background: COLORS.saffron, color: "#fff" }}>
+                          ▶ Resume
+                        </button>
+                        <button onClick={() => { if (confirm("Delete saved progress for " + (w.name || phone) + "?")) { deleteSession(phone); setAgentTab("saved"); /* force re-render */ setTimeout(() => setAgentTab("saved"), 10); } }}
+                          style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "inherit", background: "#FADBD8", color: COLORS.red }}>
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -7296,6 +7364,35 @@ function SchemeDirectory({ lang }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+// ── PERSISTENCE HELPERS ──
+const STORAGE_KEY = "jansetu_sessions";
+const APP_STORAGE_KEY = "jansetu_applications";
+
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+function saveSession(phone, data) {
+  try {
+    const all = loadSessions();
+    all[phone] = { ...data, lastUpdated: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch(e) { console.error("Save failed:", e); }
+}
+function deleteSession(phone) {
+  try {
+    const all = loadSessions();
+    delete all[phone];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch(e) { console.error("Delete failed:", e); }
+}
+function loadApplications() {
+  try { return JSON.parse(localStorage.getItem(APP_STORAGE_KEY) || "[]"); } catch { return []; }
+}
+function saveApplications(apps) {
+  try { localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(apps)); } catch(e) { console.error("Save apps failed:", e); }
+}
+
 export default function JanSetuApp() {
   const [screen, setScreen] = useState("verify");
   const [intent, setIntent] = useState(null); // "schemes" | "documents"
@@ -7303,7 +7400,7 @@ export default function JanSetuApp() {
   const [household, setHousehold] = useState(null);
   const [eligibleResults, setEligibleResults] = useState([]);
   const [selectedResult, setSelectedResult] = useState(null);
-  const [applications, setApplications] = useState([]);
+  const [applications, setApplications] = useState(() => loadApplications());
   const [lang, setLang] = useState("bn");
   const [activeTab, setActiveTab] = useState("worker"); // worker, agent, admin
   const [selectedDocCfg, setSelectedDocCfg] = useState(null);
@@ -7314,6 +7411,27 @@ export default function JanSetuApp() {
   const addToVault = (sharedKey, fileData) => setDocVault(prev => ({ ...prev, [sharedKey]: fileData }));
   // Persist questionnaire answers so going back doesn't lose data
   const [questionnaireData, setQuestionnaireData] = useState(null);
+
+  // ── AUTO-SAVE worker progress ──
+  useEffect(() => {
+    if (verifiedWorker?.phone && screen !== "verify") {
+      const sessionData = {
+        worker: verifiedWorker,
+        household, questionnaireData, intent, screen,
+        // Don't save docVault images (too large for localStorage) — save keys only
+        docVaultKeys: Object.keys(docVault),
+        eligibleResults: eligibleResults.map(r => ({ person: r.person, scheme: { id: r.scheme.id, name: r.scheme.name } })),
+      };
+      saveSession(verifiedWorker.phone, sessionData);
+    }
+  }, [verifiedWorker, household, questionnaireData, screen, intent]);
+
+  // ── AUTO-SAVE applications ──
+  useEffect(() => {
+    if (applications.length > 0) {
+      saveApplications(applications);
+    }
+  }, [applications]);
 
   const SCHEME_STEPS = ["Verify", "Intent", "Household", "Questions", "Doc Health", "Schemes", "Apply"];
   const schemeStepMap = { verify: 0, intent: 1, household: 2, questionnaire: 3, dochealth: 4, schemes: 5, application: 6 };
@@ -7489,7 +7607,15 @@ export default function JanSetuApp() {
           )}
 
           {activeTab === "agent" && (
-            <AgentConsole applications={applications} onUpdateStatus={handleUpdateStatus} />
+            <AgentConsole applications={applications} onUpdateStatus={handleUpdateStatus} onResumeWorker={(sess) => {
+              // Restore session state
+              if (sess.worker) setVerifiedWorker(sess.worker);
+              if (sess.household) setHousehold(sess.household);
+              if (sess.questionnaireData) setQuestionnaireData(sess.questionnaireData);
+              if (sess.intent) setIntent(sess.intent);
+              if (sess.screen) setScreen(sess.screen);
+              setActiveTab("worker");
+            }} />
           )}
 
           {activeTab === "docs" && (
