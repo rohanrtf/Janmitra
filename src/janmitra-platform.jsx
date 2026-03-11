@@ -5652,7 +5652,7 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
     const m = MSG.created[lang](ref, result.scheme.name);
     setMessage(m);
     setApplied(true);
-    onSubmitApp({ ref, scheme: result.scheme, person: result.person, docs, status: "Docs Pending" });
+    onSubmitApp({ ref, scheme: result.scheme, person: result.person, docs, status: "Docs Pending", uploadedDocs: { ...docSources }, workerPhone: result.person.phone || "" });
   };
 
   if (applied) {
@@ -6588,6 +6588,75 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
         <h3 style={{ color: COLORS.navy, marginBottom: 4 }}>{app.scheme.icon} {app.scheme.fullName}</h3>
         <div style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Ref: {app.ref} · {app.person.name} ({app.person.relation})</div>
 
+        {/* Worker details */}
+        <Card style={{ marginBottom: 16, background: "#EAF0FA" }}>
+          <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 8 }}>👤 Worker Details</div>
+          <div style={{ fontSize: 13, color: COLORS.slate, lineHeight: 1.8 }}>
+            <div><strong>Name:</strong> {app.person.name}</div>
+            {app.person.dob && <div><strong>DOB:</strong> {app.person.dob}</div>}
+            {app.person.gender && <div><strong>Gender:</strong> {app.person.gender}</div>}
+            {app.person.aadhaarLast4 && <div><strong>Aadhaar:</strong> XXXX-XXXX-{app.person.aadhaarLast4}</div>}
+            {app.workerPhone && <div><strong>Phone:</strong> {app.workerPhone}</div>}
+          </div>
+        </Card>
+
+        {/* Apply on Government Portal */}
+        {(() => {
+          const cfg = SUBMISSION_CFG[app.scheme.id];
+          const portalUrl = cfg?.portalUrl;
+          const PORTAL_URLS = {
+            pmjjby: null, pmsby: null, // Bank branch only
+            apy: "https://enps.nsdl.com/eNPS/NationalPensionSystem.html",
+            pm_sym: "https://maandhan.in/shramyogi",
+            swasthya_sathi: "https://swasthyasathi.gov.in",
+            lakshmir_bhandar: "https://socialsecurity.wb.gov.in",
+            rupashree: "https://wbrupashree.gov.in",
+            wb_old_age_pension: "https://socialsecurity.wb.gov.in",
+            tapasili_bandhu: "https://socialsecurity.wb.gov.in",
+            jai_johar: "https://socialsecurity.wb.gov.in",
+            manabik: "https://socialsecurity.wb.gov.in",
+            widow_pension: "https://socialsecurity.wb.gov.in",
+            svmcm: "https://svmcm.wbhed.gov.in",
+            student_credit_card: "https://wbscc.wb.gov.in",
+            kanyashree_k1: "https://wbkanyashree.gov.in",
+            kanyashree_k2: "https://wbkanyashree.gov.in",
+            pmmvy: "https://pmmvy.wcd.gov.in",
+            pm_kisan: "https://pmkisan.gov.in",
+            sukanya: null, // Post office / bank
+            samajik_mukti: "https://socialsecurity.wb.gov.in",
+            krishak_bandhu: "https://krishakbandhu.net",
+            kanya_vivah: "https://socialsecurity.wb.gov.in",
+            nsp_prematric: "https://scholarships.gov.in",
+            udid_card: "https://www.swavlambancard.gov.in",
+          };
+          const url = portalUrl || PORTAL_URLS[app.scheme.id];
+          const bankOnly = ["pmjjby", "pmsby", "sukanya"].includes(app.scheme.id);
+
+          return (
+            <Card style={{ marginBottom: 16, background: bankOnly ? "#FEF3E2" : "#E8F5EE", border: `1.5px solid ${bankOnly ? COLORS.amber : COLORS.green}30` }}>
+              <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 8 }}>🌐 Apply for this Scheme</div>
+              {bankOnly ? (
+                <div style={{ fontSize: 13, color: COLORS.slate }}>
+                  <div style={{ marginBottom: 8 }}>This scheme is applied at the <strong>bank branch</strong>. Print the pre-filled form and visit the worker's bank with original Aadhaar and passbook.</div>
+                  <button onClick={() => { const cfg = SUBMISSION_CFG[app.scheme.id]; if (cfg) setSubmitting(app.ref); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "inherit", background: COLORS.saffron, color: "#fff" }}>
+                    🖨️ Open Submission Console
+                  </button>
+                </div>
+              ) : url ? (
+                <div style={{ fontSize: 13, color: COLORS.slate }}>
+                  <div style={{ marginBottom: 8 }}>Apply on the official government portal. Keep all documents ready before clicking.</div>
+                  <button onClick={() => window.open(url, "_blank")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13, fontFamily: "inherit", background: COLORS.green, color: "#fff" }}>
+                    🌐 Open {app.scheme.name} Portal ↗
+                  </button>
+                  <span style={{ fontSize: 11, color: "#7A8A9A", marginLeft: 10 }}>{url}</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: COLORS.slate }}>Apply offline at BDO/SDO office or Duare Sarkar camp with printed documents.</div>
+              )}
+            </Card>
+          );
+        })()}
+
         {/* Status pipeline */}
         <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
           {STATUSES.map((s, i) => (
@@ -6605,16 +6674,21 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
           </div>
         )}
 
-        {/* Documents with scan/upload */}
+        {/* Documents with upload status */}
         <Card style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 12 }}>📋 Documents — Verify / Upload</div>
           {app.scheme.docs.map(d => {
             const key = `${app.ref}:${d}`;
             const st = docStatus[key];
+            const isUploaded = app.docs?.[d] === "uploaded";
+            const hasFromVault = app.uploadedDocs?.[d];
             return (
               <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F0F4F8" }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: COLORS.slate }}>{d}</div>
+                  <div style={{ fontSize: 13, color: COLORS.slate }}>
+                    {d}
+                    {(isUploaded || hasFromVault) && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: "#E8F5EE", color: COLORS.green }}>📎 Worker uploaded</span>}
+                  </div>
                   {st !== undefined && <div style={{ fontSize: 10, color: st ? COLORS.green : COLORS.red, fontWeight: 700 }}>{st ? "✅ Verified" : "❌ Rejected — re-upload needed"}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
