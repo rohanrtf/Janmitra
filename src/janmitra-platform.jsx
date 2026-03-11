@@ -3301,31 +3301,145 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
     setCamPhase("flash");
     const video = videoRef.current;
     if (!video) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext("2d").drawImage(video, 0, 0);
+
+    // Step 1: Capture full-resolution frame
+    const srcCanvas = document.createElement("canvas");
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 720;
+    srcCanvas.width = vw;
+    srcCanvas.height = vh;
+    const srcCtx = srcCanvas.getContext("2d");
+    srcCtx.drawImage(video, 0, 0, vw, vh);
     stopCam();
-    canvas.toBlob(async blob => {
+
+    // Step 2: Detect document edges using contrast analysis
+    // Get the guide rectangle area (82% x 72% centered)
+    const guideX = Math.floor(vw * 0.09);
+    const guideY = Math.floor(vh * 0.14);
+    const guideW = Math.floor(vw * 0.82);
+    const guideH = Math.floor(vh * 0.72);
+
+    // Analyze the image inside the guide area to find document boundaries
+    const imgData = srcCtx.getImageData(guideX, guideY, guideW, guideH);
+    const pixels = imgData.data;
+
+    // Simple edge detection: scan from each side to find where document starts
+    // Look for significant brightness change (document vs background)
+    const brightness = (r, g, b) => (r * 0.299 + g * 0.587 + b * 0.114);
+    const sample = (x, y) => {
+      const idx = (y * guideW + x) * 4;
+      return brightness(pixels[idx], pixels[idx + 1], pixels[idx + 2]);
+    };
+
+    // Scan inward from each edge to find document border
+    let cropLeft = 0, cropRight = guideW, cropTop = 0, cropBottom = guideH;
+
+    // Calculate average brightness of border pixels (likely background/hands)
+    let borderSum = 0, borderCount = 0;
+    for (let x = 0; x < guideW; x += 4) {
+      borderSum += sample(x, 2); borderSum += sample(x, guideH - 3);
+      borderCount += 2;
+    }
+    for (let y = 0; y < guideH; y += 4) {
+      borderSum += sample(2, y); borderSum += sample(guideW - 3, y);
+      borderCount += 2;
+    }
+    const bgBright = borderSum / borderCount;
+
+    // Scan from left
+    for (let x = 0; x < guideW * 0.3; x++) {
+      let colBright = 0;
+      for (let y = Math.floor(guideH * 0.2); y < guideH * 0.8; y += 3) colBright += sample(x, y);
+      colBright /= Math.floor((guideH * 0.6) / 3);
+      if (Math.abs(colBright - bgBright) > 25) { cropLeft = Math.max(0, x - 5); break; }
+    }
+    // Scan from right
+    for (let x = guideW - 1; x > guideW * 0.7; x--) {
+      let colBright = 0;
+      for (let y = Math.floor(guideH * 0.2); y < guideH * 0.8; y += 3) colBright += sample(x, y);
+      colBright /= Math.floor((guideH * 0.6) / 3);
+      if (Math.abs(colBright - bgBright) > 25) { cropRight = Math.min(guideW, x + 5); break; }
+    }
+    // Scan from top
+    for (let y = 0; y < guideH * 0.3; y++) {
+      let rowBright = 0;
+      for (let x = Math.floor(guideW * 0.2); x < guideW * 0.8; x += 3) rowBright += sample(x, y);
+      rowBright /= Math.floor((guideW * 0.6) / 3);
+      if (Math.abs(rowBright - bgBright) > 25) { cropTop = Math.max(0, y - 5); break; }
+    }
+    // Scan from bottom
+    for (let y = guideH - 1; y > guideH * 0.7; y--) {
+      let rowBright = 0;
+      for (let x = Math.floor(guideW * 0.2); x < guideW * 0.8; x += 3) rowBright += sample(x, y);
+      rowBright /= Math.floor((guideW * 0.6) / 3);
+      if (Math.abs(rowBright - bgBright) > 25) { cropBottom = Math.min(guideH, y + 5); break; }
+    }
+
+    // Step 3: Crop to detected document area
+    const docW = cropRight - cropLeft;
+    const docH = cropBottom - cropTop;
+
+    // Only use detected crop if it's a reasonable document shape (not too small or weird)
+    const useDetectedCrop = docW > guideW * 0.4 && docH > guideH * 0.4 && docW < guideW && docH < guideH;
+
+    const finalX = guideX + (useDetectedCrop ? cropLeft : 0);
+    const finalY = guideY + (useDetectedCrop ? cropTop : 0);
+    const finalW = useDetectedCrop ? docW : guideW;
+    const finalH = useDetectedCrop ? docH : guideH;
+
+    // Step 4: Create clean cropped document canvas
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = Math.min(finalW, 2000);  // Cap at 2000px
+    outCanvas.height = Math.min(finalH, 2000);
+    const outCtx = outCanvas.getContext("2d");
+    outCtx.drawImage(srcCanvas, finalX, finalY, finalW, finalH, 0, 0, outCanvas.width, outCanvas.height);
+
+    // Step 5: Enhance image — increase contrast, sharpen for better OCR
+    const enhData = outCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+    const ep = enhData.data;
+
+    // Auto-levels: find min/max brightness and stretch
+    let minB = 255, maxB = 0;
+    for (let i = 0; i < ep.length; i += 16) { // Sample every 4th pixel
+      const b = brightness(ep[i], ep[i+1], ep[i+2]);
+      if (b < minB) minB = b;
+      if (b > maxB) maxB = b;
+    }
+    const range = maxB - minB || 1;
+    const contrast = 1.2; // Slight contrast boost
+
+    for (let i = 0; i < ep.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        let v = ep[i + c];
+        // Normalize to 0-255 range
+        v = ((v - minB) / range) * 255;
+        // Apply contrast
+        v = ((v / 255 - 0.5) * contrast + 0.5) * 255;
+        ep[i + c] = Math.max(0, Math.min(255, Math.round(v)));
+      }
+    }
+    outCtx.putImageData(enhData, 0, 0);
+
+    // Step 6: Convert to blob and proceed
+    outCanvas.toBlob(async blob => {
       const src = URL.createObjectURL(blob);
       setCapturedSrc(src);
       setCamPhase("extracting");
-      // Convert to base64 for AI
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const b64 = ev.target.result.split(",")[1];
         const prompt = SCAN_CONFIRM_PROMPTS[slotKey] || SCAN_CONFIRM_PROMPTS.default;
         const result = await callClaudeVision(b64, "image/jpeg", prompt);
         if (!result) {
-          setExtractErr("AI could not read document clearly. Try again with better light.");
-          setCamPhase("confirm"); // still let them use the image
+          setExtractErr("AI could not read document clearly. Try again with better light and flat surface.");
+          setCamPhase("confirm");
         } else {
           setExtracted(result);
           setCamPhase("confirm");
         }
       };
       reader.readAsDataURL(blob);
-    }, "image/jpeg", 0.92);
+    }, "image/jpeg", 0.95);
   };
 
   const flipCam = () => {
@@ -3402,8 +3516,11 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
         {camPhase === "flash" && <div style={{ position: "absolute", inset: 0, background: "#fff", opacity: 0.85 }} />}
 
         {/* Guide text */}
+        <div style={{ position: "absolute", top: 8, left: 0, right: 0, textAlign: "center", fontSize: 12, color: "#fff", fontWeight: 700, pointerEvents: "none", textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+          📄 Align document edges with the frame
+        </div>
         <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.9)", fontWeight: 600, pointerEvents: "none" }}>
-          Place document flat · Fill the rectangle · Keep steady
+          Flat surface · Good light · Hold steady · No fingers on document
         </div>
 
         {/* Flip button */}
@@ -5469,18 +5586,32 @@ function QuestionnaireScreen({ household, existingAnswers, onComplete, onBack })
 }
 
 // ─── SCREEN 4: SCHEME RESULTS ─────────────────────────────────────────────────
-function SchemesScreen({ results, lang, onApply, onBack }) {
+function SchemesScreen({ results, lang, onApply, onApplyAll, onBack }) {
   const [filter, setFilter] = useState("All");
+  const [selectedSchemes, setSelectedSchemes] = useState(new Set());
   const categories = ["All", "Central", "West Bengal"];
   const filtered = filter === "All" ? results : results.filter(r => r.scheme.category === filter);
   const diffColor = d => d === "Easy" ? COLORS.green : d === "Medium" ? COLORS.amber : COLORS.red;
 
+  const toggleScheme = (idx) => {
+    setSelectedSchemes(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedSchemes.size === results.length) setSelectedSchemes(new Set());
+    else setSelectedSchemes(new Set(results.map((_, i) => i)));
+  };
+
   // Group by person
   const grouped = {};
-  filtered.forEach(r => {
+  filtered.forEach((r, ri) => {
     const key = r.person.name + "|" + r.person.relation;
     if (!grouped[key]) grouped[key] = { person: r.person, schemes: [] };
-    grouped[key].schemes.push(r);
+    grouped[key].schemes.push({ ...r, globalIdx: results.indexOf(r) });
   });
   const personGroups = Object.values(grouped);
 
@@ -5491,7 +5622,23 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
         <h2 style={{ fontSize: 20, color: COLORS.navy, margin: 0 }}>Eligible Schemes</h2>
         <Badge label={results.length + " found"} color={COLORS.green} />
       </div>
-      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Grouped by family member, sorted by easiest first</p>
+      <p style={{ color: "#7A8A9A", fontSize: 13, marginBottom: 16 }}>Select schemes to apply for — you can apply for multiple at once</p>
+
+      {/* Apply All / Selected bar */}
+      <div style={{ background: COLORS.navy, borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button onClick={selectAll} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {selectedSchemes.size === results.length ? "☐ Deselect All" : "☑ Select All (" + results.length + ")"}
+        </button>
+        {selectedSchemes.size > 0 && (
+          <button onClick={() => {
+            const selected = results.filter((_, i) => selectedSchemes.has(i));
+            if (onApplyAll) onApplyAll(selected);
+          }} style={{ background: COLORS.saffron, color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>
+            📨 Apply for {selectedSchemes.size} Scheme{selectedSchemes.size > 1 ? "s" : ""}
+          </button>
+        )}
+      </div>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {categories.map(c => (
           <button key={c} onClick={() => setFilter(c)} style={{
@@ -5514,11 +5661,14 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{group.person.relation} | {group.schemes.length} scheme{group.schemes.length !== 1 ? "s" : ""} eligible</div>
             </div>
           </div>
-          {group.schemes.map((r, i) => (
-            <Card key={i} style={{ marginBottom: 10, borderLeft: "4px solid " + COLORS.saffron }}>
+          {group.schemes.map((r, i) => {
+            const isSelected = selectedSchemes.has(r.globalIdx);
+            return (
+            <Card key={i} style={{ marginBottom: 10, borderLeft: `4px solid ${isSelected ? COLORS.green : COLORS.saffron}`, cursor: "pointer" }} onClick={() => toggleScheme(r.globalIdx)}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 18, cursor: "pointer" }}>{isSelected ? "☑️" : "⬜"}</span>
                     <span style={{ fontSize: 22 }}>{r.scheme.icon}</span>
                     <div style={{ fontWeight: 800, color: COLORS.navy, fontSize: 14 }}>{r.scheme.fullName}</div>
                   </div>
@@ -5539,12 +5689,13 @@ function SchemesScreen({ results, lang, onApply, onBack }) {
                     Docs needed: {r.scheme.docs.join(", ")}
                   </div>
                 </div>
-                <Button onClick={() => onApply(r)} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
-                  Apply
+                <Button onClick={(e) => { e.stopPropagation(); onApply(r); }} variant="primary" size="sm" style={{ marginLeft: 12, flexShrink: 0 }}>
+                  Apply →
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ))}
     </div>
@@ -5643,7 +5794,22 @@ function ApplicationScreen({ result, workerRef, lang, onBack, onSubmitApp, docVa
   const total = result.scheme.docs.length;
 
   const uploadDoc = (docName) => {
-    setDocs(p => ({ ...p, [docName]: "uploaded" }));
+    // Open file picker for actual upload
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.pdf";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setDocSources(prev => ({ ...prev, [docName]: { source: "upload", name: file.name, preview: ev.target.result, type: file.type, size: file.size } }));
+          setDocs(p => ({ ...p, [docName]: "uploaded" }));
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
   };
 
   const allUploaded = Object.values(docs).every(v => v === "uploaded");
@@ -7663,6 +7829,14 @@ export default function JanSetuApp() {
                   results={eligibleResults}
                   lang={lang}
                   onApply={handleApply}
+                  onApplyAll={(selectedResults) => {
+                    // Submit all selected schemes as separate applications
+                    selectedResults.forEach(r => {
+                      const ref = generateRef();
+                      handleSubmitApp({ ref, scheme: r.scheme, person: r.person, docs: {}, status: "Docs Pending", uploadedDocs: {}, workerPhone: verifiedWorker?.phone || "" });
+                    });
+                    alert(`✅ ${selectedResults.length} application(s) submitted! Go to Agent tab to process them.`);
+                  }}
                   onBack={() => setScreen("questionnaire")}
                 />
               )}
