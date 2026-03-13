@@ -3510,223 +3510,75 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
     </div>
   );
 
-  // ── LIVE EDGE DETECTION ──
-  const overlayCanvasRef = useRef(null);
-  const edgeLoopRef = useRef(null);
-  const sampleCanvasRef = useRef(null);
-  const [docDetected, setDocDetected] = useState(false);
-  const [stableCount, setStableCount] = useState(0);
-  const lastCornersRef = useRef(null);
-  const frameSkipRef = useRef(0);
 
-  const startEdgeDetection = () => {
-    // Create reusable sample canvas once
-    if (!sampleCanvasRef.current) {
-      sampleCanvasRef.current = document.createElement("canvas");
-      sampleCanvasRef.current.width = 120;
-      sampleCanvasRef.current.height = 90;
-    }
-
-    const loop = () => {
-      try {
-        const video = videoRef.current;
-        const overlay = overlayCanvasRef.current;
-        if (!video || !overlay || video.readyState < 2 || video.videoWidth === 0) {
-          edgeLoopRef.current = requestAnimationFrame(loop);
-          return;
-        }
-
-        // Skip every other frame for performance
-        frameSkipRef.current++;
-        if (frameSkipRef.current % 3 !== 0) {
-          edgeLoopRef.current = requestAnimationFrame(loop);
-          return;
-        }
-
-        const rect = overlay.parentElement?.getBoundingClientRect();
-        const ow = rect?.width || 320;
-        const oh = rect?.height || 240;
-        if (overlay.width !== Math.floor(ow)) overlay.width = Math.floor(ow);
-        if (overlay.height !== Math.floor(oh)) overlay.height = Math.floor(oh);
-        const ctx = overlay.getContext("2d");
-        ctx.clearRect(0, 0, ow, oh);
-
-        // Sample video at very low res
-        const sW = 120, sH = 90;
-        const sc = sampleCanvasRef.current;
-        const sCtx = sc.getContext("2d");
-        sCtx.drawImage(video, 0, 0, sW, sH);
-        const px = sCtx.getImageData(0, 0, sW, sH).data;
-
-        // Simple edge scan: look for strong brightness gradients from each side
-        const br = (x, y) => {
-          if (x < 0 || x >= sW || y < 0 || y >= sH) return 128;
-          const i = (y * sW + x) * 4;
-          return px[i] * 0.3 + px[i+1] * 0.59 + px[i+2] * 0.11;
-        };
-
-        // Scan from each edge to find where brightness changes sharply
-        const threshold = 20;
-        let left = Math.floor(sW * 0.08), right = Math.floor(sW * 0.92);
-        let top = Math.floor(sH * 0.08), bottom = Math.floor(sH * 0.92);
-
-        // Average border brightness
-        let borderBr = 0, bCount = 0;
-        for (let x = 0; x < sW; x += 3) { borderBr += br(x, 1) + br(x, sH-2); bCount += 2; }
-        for (let y = 0; y < sH; y += 3) { borderBr += br(1, y) + br(sW-2, y); bCount += 2; }
-        borderBr /= bCount;
-
-        // Scan left
-        for (let x = 2; x < sW * 0.4; x++) {
-          let diff = 0, cnt = 0;
-          for (let y = Math.floor(sH*0.2); y < sH*0.8; y += 3) { diff += Math.abs(br(x,y) - br(x-2,y)); cnt++; }
-          if (diff/cnt > threshold) { left = x; break; }
-        }
-        // Scan right
-        for (let x = sW - 3; x > sW * 0.6; x--) {
-          let diff = 0, cnt = 0;
-          for (let y = Math.floor(sH*0.2); y < sH*0.8; y += 3) { diff += Math.abs(br(x,y) - br(x+2,y)); cnt++; }
-          if (diff/cnt > threshold) { right = x; break; }
-        }
-        // Scan top
-        for (let y = 2; y < sH * 0.4; y++) {
-          let diff = 0, cnt = 0;
-          for (let x = Math.floor(sW*0.2); x < sW*0.8; x += 3) { diff += Math.abs(br(x,y) - br(x,y-2)); cnt++; }
-          if (diff/cnt > threshold) { top = y; break; }
-        }
-        // Scan bottom
-        for (let y = sH - 3; y > sH * 0.6; y--) {
-          let diff = 0, cnt = 0;
-          for (let x = Math.floor(sW*0.2); x < sW*0.8; x += 3) { diff += Math.abs(br(x,y) - br(x,y+2)); cnt++; }
-          if (diff/cnt > threshold) { bottom = y; break; }
-        }
-
-        // Scale to overlay
-        const sx = ow / sW, sy = oh / sH;
-        const corners = [
-          { x: left*sx, y: top*sy }, { x: right*sx, y: top*sy },
-          { x: right*sx, y: bottom*sy }, { x: left*sx, y: bottom*sy }
-        ];
-
-        const detW = (right - left) / sW, detH = (bottom - top) / sH;
-        const valid = detW > 0.25 && detW < 0.92 && detH > 0.25 && detH < 0.92;
-
-        if (valid) {
-          // Draw green border
-          ctx.beginPath();
-          ctx.moveTo(corners[0].x, corners[0].y);
-          corners.forEach(c => ctx.lineTo(c.x, c.y));
-          ctx.closePath();
-          ctx.strokeStyle = "#00FF88";
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
-          ctx.fillStyle = "rgba(0,255,136,0.06)";
-          ctx.fill();
-
-          // Corner dots
-          corners.forEach(c => {
-            ctx.beginPath(); ctx.arc(c.x, c.y, 6, 0, Math.PI*2);
-            ctx.fillStyle = "#00FF88"; ctx.fill();
-            ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, Math.PI*2);
-            ctx.fillStyle = "#fff"; ctx.fill();
-          });
-
-          setDocDetected(true);
-
-          // Stability check
-          const prev = lastCornersRef.current;
-          if (prev) {
-            const drift = corners.reduce((s,c,i) => s + Math.abs(c.x-prev[i].x) + Math.abs(c.y-prev[i].y), 0);
-            if (drift < 20) setStableCount(sc => sc + 1);
-            else setStableCount(0);
-          }
-          lastCornersRef.current = corners;
-        } else {
-          setDocDetected(false);
-          setStableCount(0);
-          lastCornersRef.current = null;
-
-          // Dashed guide rectangle
-          ctx.strokeStyle = "rgba(255,255,255,0.4)";
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([8, 4]);
-          ctx.strokeRect(ow*0.09, oh*0.14, ow*0.82, oh*0.72);
-          ctx.setLineDash([]);
-        }
-      } catch(e) {
-        // Silently continue on error — don't break the loop
-      }
-      edgeLoopRef.current = requestAnimationFrame(loop);
-    };
-    edgeLoopRef.current = requestAnimationFrame(loop);
-  };
-
-  const stopEdgeDetection = () => {
-    if (edgeLoopRef.current) { cancelAnimationFrame(edgeLoopRef.current); edgeLoopRef.current = null; }
-  };
-
-  useEffect(() => {
-    if (camPhase === "live") {
-      const timer = setTimeout(startEdgeDetection, 800);
-      return () => { clearTimeout(timer); stopEdgeDetection(); };
-    } else {
-      stopEdgeDetection();
-    }
-  }, [camPhase]);
-
-  // Auto-capture when stable ~2 seconds
-  useEffect(() => {
-    if (stableCount > 20 && camPhase === "live") {
-      snapDoc();
-    }
-  }, [stableCount]);
+  // ── LIVE VIEWFINDER (CSS-only — no canvas, works on all devices) ──────────
 
   // ── LIVE VIEWFINDER ───────────────────────────────────────────────────────
   if (camPhase === "live" || camPhase === "flash") return (
-    <div style={{ borderRadius: 12, overflow: "hidden", border: `2px solid ${docDetected ? "#00FF88" : "#0D2240"}`, background: "#000", transition: "border-color 0.3s" }}>
+    <div style={{ borderRadius: 12, overflow: "hidden", border: "2px solid #0D2240", background: "#000" }}>
       <div style={{ position: "relative", background: "#000" }}>
         <video ref={videoRef} autoPlay playsInline muted
           style={{ width: "100%", maxHeight: 360, display: "block", objectFit: "cover",
                    opacity: camPhase === "flash" ? 0 : 1, transition: "opacity 0.08s" }} />
 
-        {/* Live edge detection overlay canvas */}
-        <canvas ref={overlayCanvasRef}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+        {/* Document guide overlay with green frame + corner brackets + scan line */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{
+            width: "84%", height: "74%",
+            border: "2.5px solid rgba(0,255,136,0.7)",
+            borderRadius: 6,
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.45), inset 0 0 30px rgba(0,255,136,0.05)",
+            position: "relative",
+            overflow: "hidden",
+          }}>
+            {/* Corner brackets */}
+            <div style={{ position:"absolute", top:-2, left:-2, width:24, height:24, borderTop:"3.5px solid #00FF88", borderLeft:"3.5px solid #00FF88", borderRadius:"3px 0 0 0" }} />
+            <div style={{ position:"absolute", top:-2, right:-2, width:24, height:24, borderTop:"3.5px solid #00FF88", borderRight:"3.5px solid #00FF88", borderRadius:"0 3px 0 0" }} />
+            <div style={{ position:"absolute", bottom:-2, left:-2, width:24, height:24, borderBottom:"3.5px solid #00FF88", borderLeft:"3.5px solid #00FF88", borderRadius:"0 0 0 3px" }} />
+            <div style={{ position:"absolute", bottom:-2, right:-2, width:24, height:24, borderBottom:"3.5px solid #00FF88", borderRight:"3.5px solid #00FF88", borderRadius:"0 0 3px 0" }} />
+
+            {/* Animated scan line */}
+            <div style={{
+              position: "absolute", left: 8, right: 8, height: 2,
+              background: "linear-gradient(90deg, transparent 0%, #00FF88 30%, #00FF88 70%, transparent 100%)",
+              opacity: 0.6,
+              animation: "jansetu_scanline 2.5s ease-in-out infinite",
+            }} />
+          </div>
+        </div>
+
+        {/* Inject keyframe animation */}
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes jansetu_scanline { 0%,100% { top: 12%; opacity: 0.3; } 50% { top: 82%; opacity: 0.7; } }` }} />
 
         {/* Flash overlay */}
         {camPhase === "flash" && <div style={{ position: "absolute", inset: 0, background: "#fff", opacity: 0.85 }} />}
 
-        {/* Status indicator */}
-        <div style={{ position: "absolute", top: 8, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
-          {docDetected ? (
-            <span style={{ background: "rgba(0,255,136,0.9)", color: "#000", padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
-              ✅ Document detected {stableCount > 20 ? "— hold still, auto-scanning..." : "— hold steady"}
-            </span>
-          ) : (
-            <span style={{ background: "rgba(0,0,0,0.6)", color: "#fff", padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
-              📄 Position document in frame
-            </span>
-          )}
+        {/* Top guide text */}
+        <div style={{ position: "absolute", top: 10, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+          <span style={{ background: "rgba(0,0,0,0.55)", color: "#fff", padding: "4px 14px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
+            📄 Align document edges with the green frame
+          </span>
         </div>
 
         {/* Bottom tips */}
-        <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.8)", fontWeight: 600, pointerEvents: "none" }}>
+        <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.75)", fontWeight: 600, pointerEvents: "none" }}>
           Flat surface · Good light · No fingers on document
         </div>
 
-        {/* Flip button */}
+        {/* Flip camera button */}
         <button onClick={flipCam} style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", borderRadius: 7, padding: "5px 9px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 }}>🔄</button>
       </div>
 
-      {/* Controls */}
-      <div style={{ background: "#111", padding: "12px 14px", display: "flex", gap: 8, alignItems: "center" }}>
+      {/* Capture controls */}
+      <div style={{ background: "#111", padding: "12px 14px", display: "flex", gap: 8 }}>
         <button onClick={onCancel} style={{ background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, padding: "9px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>✕</button>
-        <button onClick={snapDoc} style={{ flex: 1, background: docDetected ? COLORS.green : COLORS.saffron, color: "#fff", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", transition: "background 0.3s" }}>
-          {docDetected ? "✅ Capture Now" : "📷 Scan Document"}
+        <button onClick={snapDoc} style={{ flex: 1, background: COLORS.green, color: "#fff", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>
+          📷 Scan Document
         </button>
       </div>
     </div>
   );
+
 
   // ── EXTRACTING ────────────────────────────────────────────────────────────
   if (camPhase === "extracting") return (
