@@ -3513,166 +3513,149 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
   // ── LIVE EDGE DETECTION ──
   const overlayCanvasRef = useRef(null);
   const edgeLoopRef = useRef(null);
+  const sampleCanvasRef = useRef(null);
   const [docDetected, setDocDetected] = useState(false);
   const [stableCount, setStableCount] = useState(0);
   const lastCornersRef = useRef(null);
+  const frameSkipRef = useRef(0);
 
   const startEdgeDetection = () => {
+    // Create reusable sample canvas once
+    if (!sampleCanvasRef.current) {
+      sampleCanvasRef.current = document.createElement("canvas");
+      sampleCanvasRef.current.width = 120;
+      sampleCanvasRef.current.height = 90;
+    }
+
     const loop = () => {
-      const video = videoRef.current;
-      const overlay = overlayCanvasRef.current;
-      if (!video || !overlay || video.readyState < 2) {
-        edgeLoopRef.current = requestAnimationFrame(loop);
-        return;
-      }
-
-      const ow = overlay.parentElement?.clientWidth || 320;
-      const oh = overlay.parentElement?.clientHeight || 240;
-      overlay.width = ow;
-      overlay.height = oh;
-      const ctx = overlay.getContext("2d");
-      ctx.clearRect(0, 0, ow, oh);
-
-      // Sample video frame at low res for speed
-      const sampleW = 160, sampleH = 120;
-      const sCanvas = document.createElement("canvas");
-      sCanvas.width = sampleW; sCanvas.height = sampleH;
-      const sCtx = sCanvas.getContext("2d");
-      sCtx.drawImage(video, 0, 0, sampleW, sampleH);
-      const imgData = sCtx.getImageData(0, 0, sampleW, sampleH).data;
-
-      const brightness = (x, y) => {
-        const i = (y * sampleW + x) * 4;
-        return imgData[i] * 0.299 + imgData[i+1] * 0.587 + imgData[i+2] * 0.114;
-      };
-
-      // Compute edge magnitude using Sobel-like operator
-      const edges = new Float32Array(sampleW * sampleH);
-      for (let y = 1; y < sampleH - 1; y++) {
-        for (let x = 1; x < sampleW - 1; x++) {
-          const gx = -brightness(x-1,y-1) + brightness(x+1,y-1) - 2*brightness(x-1,y) + 2*brightness(x+1,y) - brightness(x-1,y+1) + brightness(x+1,y+1);
-          const gy = -brightness(x-1,y-1) - 2*brightness(x,y-1) - brightness(x+1,y-1) + brightness(x-1,y+1) + 2*brightness(x,y+1) + brightness(x+1,y+1);
-          edges[y * sampleW + x] = Math.sqrt(gx*gx + gy*gy);
+      try {
+        const video = videoRef.current;
+        const overlay = overlayCanvasRef.current;
+        if (!video || !overlay || video.readyState < 2 || video.videoWidth === 0) {
+          edgeLoopRef.current = requestAnimationFrame(loop);
+          return;
         }
-      }
 
-      // Find document edges by scanning from each side
-      const edgeThreshold = 30;
-      const scanRange = 0.35;
-      let left = 0, right = sampleW, top = 0, bottom = sampleH;
-
-      // Scan from left
-      for (let x = Math.floor(sampleW * 0.05); x < sampleW * scanRange; x++) {
-        let edgeSum = 0, count = 0;
-        for (let y = Math.floor(sampleH * 0.15); y < sampleH * 0.85; y += 2) {
-          edgeSum += edges[y * sampleW + x]; count++;
+        // Skip every other frame for performance
+        frameSkipRef.current++;
+        if (frameSkipRef.current % 3 !== 0) {
+          edgeLoopRef.current = requestAnimationFrame(loop);
+          return;
         }
-        if (edgeSum / count > edgeThreshold) { left = x; break; }
-      }
-      // Scan from right
-      for (let x = Math.floor(sampleW * 0.95); x > sampleW * (1 - scanRange); x--) {
-        let edgeSum = 0, count = 0;
-        for (let y = Math.floor(sampleH * 0.15); y < sampleH * 0.85; y += 2) {
-          edgeSum += edges[y * sampleW + x]; count++;
+
+        const rect = overlay.parentElement?.getBoundingClientRect();
+        const ow = rect?.width || 320;
+        const oh = rect?.height || 240;
+        if (overlay.width !== Math.floor(ow)) overlay.width = Math.floor(ow);
+        if (overlay.height !== Math.floor(oh)) overlay.height = Math.floor(oh);
+        const ctx = overlay.getContext("2d");
+        ctx.clearRect(0, 0, ow, oh);
+
+        // Sample video at very low res
+        const sW = 120, sH = 90;
+        const sc = sampleCanvasRef.current;
+        const sCtx = sc.getContext("2d");
+        sCtx.drawImage(video, 0, 0, sW, sH);
+        const px = sCtx.getImageData(0, 0, sW, sH).data;
+
+        // Simple edge scan: look for strong brightness gradients from each side
+        const br = (x, y) => {
+          if (x < 0 || x >= sW || y < 0 || y >= sH) return 128;
+          const i = (y * sW + x) * 4;
+          return px[i] * 0.3 + px[i+1] * 0.59 + px[i+2] * 0.11;
+        };
+
+        // Scan from each edge to find where brightness changes sharply
+        const threshold = 20;
+        let left = Math.floor(sW * 0.08), right = Math.floor(sW * 0.92);
+        let top = Math.floor(sH * 0.08), bottom = Math.floor(sH * 0.92);
+
+        // Average border brightness
+        let borderBr = 0, bCount = 0;
+        for (let x = 0; x < sW; x += 3) { borderBr += br(x, 1) + br(x, sH-2); bCount += 2; }
+        for (let y = 0; y < sH; y += 3) { borderBr += br(1, y) + br(sW-2, y); bCount += 2; }
+        borderBr /= bCount;
+
+        // Scan left
+        for (let x = 2; x < sW * 0.4; x++) {
+          let diff = 0, cnt = 0;
+          for (let y = Math.floor(sH*0.2); y < sH*0.8; y += 3) { diff += Math.abs(br(x,y) - br(x-2,y)); cnt++; }
+          if (diff/cnt > threshold) { left = x; break; }
         }
-        if (edgeSum / count > edgeThreshold) { right = x; break; }
-      }
-      // Scan from top
-      for (let y = Math.floor(sampleH * 0.05); y < sampleH * scanRange; y++) {
-        let edgeSum = 0, count = 0;
-        for (let x = Math.floor(sampleW * 0.15); x < sampleW * 0.85; x += 2) {
-          edgeSum += edges[y * sampleW + x]; count++;
+        // Scan right
+        for (let x = sW - 3; x > sW * 0.6; x--) {
+          let diff = 0, cnt = 0;
+          for (let y = Math.floor(sH*0.2); y < sH*0.8; y += 3) { diff += Math.abs(br(x,y) - br(x+2,y)); cnt++; }
+          if (diff/cnt > threshold) { right = x; break; }
         }
-        if (edgeSum / count > edgeThreshold) { top = y; break; }
-      }
-      // Scan from bottom
-      for (let y = Math.floor(sampleH * 0.95); y > sampleH * (1 - scanRange); y--) {
-        let edgeSum = 0, count = 0;
-        for (let x = Math.floor(sampleW * 0.15); x < sampleW * 0.85; x += 2) {
-          edgeSum += edges[y * sampleW + x]; count++;
+        // Scan top
+        for (let y = 2; y < sH * 0.4; y++) {
+          let diff = 0, cnt = 0;
+          for (let x = Math.floor(sW*0.2); x < sW*0.8; x += 3) { diff += Math.abs(br(x,y) - br(x,y-2)); cnt++; }
+          if (diff/cnt > threshold) { top = y; break; }
         }
-        if (edgeSum / count > edgeThreshold) { bottom = y; break; }
-      }
+        // Scan bottom
+        for (let y = sH - 3; y > sH * 0.6; y--) {
+          let diff = 0, cnt = 0;
+          for (let x = Math.floor(sW*0.2); x < sW*0.8; x += 3) { diff += Math.abs(br(x,y) - br(x,y+2)); cnt++; }
+          if (diff/cnt > threshold) { bottom = y; break; }
+        }
 
-      // Scale detected corners to overlay size
-      const scaleX = ow / sampleW, scaleY = oh / sampleH;
-      const corners = [
-        { x: left * scaleX, y: top * scaleY },
-        { x: right * scaleX, y: top * scaleY },
-        { x: right * scaleX, y: bottom * scaleY },
-        { x: left * scaleX, y: bottom * scaleY },
-      ];
+        // Scale to overlay
+        const sx = ow / sW, sy = oh / sH;
+        const corners = [
+          { x: left*sx, y: top*sy }, { x: right*sx, y: top*sy },
+          { x: right*sx, y: bottom*sy }, { x: left*sx, y: bottom*sy }
+        ];
 
-      // Check if detection is reasonable (document fills 20-95% of frame)
-      const detW = (right - left) / sampleW;
-      const detH = (bottom - top) / sampleH;
-      const isValid = detW > 0.2 && detW < 0.95 && detH > 0.2 && detH < 0.95;
+        const detW = (right - left) / sW, detH = (bottom - top) / sH;
+        const valid = detW > 0.25 && detW < 0.92 && detH > 0.25 && detH < 0.92;
 
-      if (isValid) {
-        // Draw detected document border
-        ctx.beginPath();
-        ctx.moveTo(corners[0].x, corners[0].y);
-        corners.forEach(c => ctx.lineTo(c.x, c.y));
-        ctx.closePath();
-        ctx.strokeStyle = "#00FF88";
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Semi-transparent fill inside detected area
-        ctx.fillStyle = "rgba(0, 255, 136, 0.08)";
-        ctx.fill();
-
-        // Draw corner circles
-        corners.forEach(c => {
+        if (valid) {
+          // Draw green border
           ctx.beginPath();
-          ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
-          ctx.fillStyle = "#00FF88";
+          ctx.moveTo(corners[0].x, corners[0].y);
+          corners.forEach(c => ctx.lineTo(c.x, c.y));
+          ctx.closePath();
+          ctx.strokeStyle = "#00FF88";
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+          ctx.fillStyle = "rgba(0,255,136,0.06)";
           ctx.fill();
-          ctx.beginPath();
-          ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = "#fff";
-          ctx.fill();
-        });
 
-        // Dark overlay outside detected area
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, ow, oh);
-        ctx.moveTo(corners[0].x, corners[0].y);
-        for (let i = corners.length - 1; i >= 0; i--) ctx.lineTo(corners[i].x, corners[i].y);
-        ctx.closePath();
-        ctx.clip();
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.fillRect(0, 0, ow, oh);
-        ctx.restore();
+          // Corner dots
+          corners.forEach(c => {
+            ctx.beginPath(); ctx.arc(c.x, c.y, 6, 0, Math.PI*2);
+            ctx.fillStyle = "#00FF88"; ctx.fill();
+            ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, Math.PI*2);
+            ctx.fillStyle = "#fff"; ctx.fill();
+          });
 
-        setDocDetected(true);
+          setDocDetected(true);
 
-        // Check stability — if corners haven't moved much, increment stable counter
-        const prev = lastCornersRef.current;
-        if (prev) {
-          const totalDrift = corners.reduce((sum, c, i) => sum + Math.abs(c.x - prev[i].x) + Math.abs(c.y - prev[i].y), 0);
-          if (totalDrift < 15) {
-            setStableCount(sc => sc + 1);
-          } else {
-            setStableCount(0);
+          // Stability check
+          const prev = lastCornersRef.current;
+          if (prev) {
+            const drift = corners.reduce((s,c,i) => s + Math.abs(c.x-prev[i].x) + Math.abs(c.y-prev[i].y), 0);
+            if (drift < 20) setStableCount(sc => sc + 1);
+            else setStableCount(0);
           }
+          lastCornersRef.current = corners;
+        } else {
+          setDocDetected(false);
+          setStableCount(0);
+          lastCornersRef.current = null;
+
+          // Dashed guide rectangle
+          ctx.strokeStyle = "rgba(255,255,255,0.4)";
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([8, 4]);
+          ctx.strokeRect(ow*0.09, oh*0.14, ow*0.82, oh*0.72);
+          ctx.setLineDash([]);
         }
-        lastCornersRef.current = corners;
-      } else {
-        setDocDetected(false);
-        setStableCount(0);
-        lastCornersRef.current = null;
-
-        // Show guide rectangle when no document detected
-        const gx = ow * 0.09, gy = oh * 0.14, gw = ow * 0.82, gh = oh * 0.72;
-        ctx.strokeStyle = "rgba(255,255,255,0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([8, 4]);
-        ctx.strokeRect(gx, gy, gw, gh);
-        ctx.setLineDash([]);
+      } catch(e) {
+        // Silently continue on error — don't break the loop
       }
-
       edgeLoopRef.current = requestAnimationFrame(loop);
     };
     edgeLoopRef.current = requestAnimationFrame(loop);
@@ -3682,19 +3665,18 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
     if (edgeLoopRef.current) { cancelAnimationFrame(edgeLoopRef.current); edgeLoopRef.current = null; }
   };
 
-  // Start/stop edge detection with camera
   useEffect(() => {
     if (camPhase === "live") {
-      const timer = setTimeout(startEdgeDetection, 500); // Give camera 500ms to warm up
+      const timer = setTimeout(startEdgeDetection, 800);
       return () => { clearTimeout(timer); stopEdgeDetection(); };
     } else {
       stopEdgeDetection();
     }
   }, [camPhase]);
 
-  // Auto-capture when document is stable for ~1.5 seconds (45 frames at ~30fps)
+  // Auto-capture when stable ~2 seconds
   useEffect(() => {
-    if (stableCount > 40 && camPhase === "live") {
+    if (stableCount > 20 && camPhase === "live") {
       snapDoc();
     }
   }, [stableCount]);
