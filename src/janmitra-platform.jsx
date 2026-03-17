@@ -2274,6 +2274,7 @@ const DOC_PROMPTS = {
 
 // Scan prompts for uploadDocs panel keys (extract key fields to confirm correct doc was scanned)
 const SCAN_CONFIRM_PROMPTS = {
+  aadhaar:         `This is an Indian Aadhaar card. Return ONLY JSON: {"name":"full name as printed","dob":"DD/MM/YYYY","gender":"Male/Female","aadhaarNumber":"12 digits no spaces","aadhaarLast4":"last 4 digits","address":"full address if visible","addressDistrict":"district from address","docType":"aadhaar"}`,
   aadhaar_front:   `This is an Aadhaar card front. Return ONLY JSON: {"name":"full name","aadhaarLast4":"last 4 digits","dob":"DOB if visible","docType":"aadhaar"}`,
   aadhaar_back:    `This is an Aadhaar card back. Return ONLY JSON: {"aadhaarLast4":"last 4 digits if visible","address":"address if visible","docType":"aadhaar_back"}`,
   aadhaar_head:    `This is an Aadhaar card. Return ONLY JSON: {"name":"full name","aadhaarLast4":"last 4 digits","docType":"aadhaar"}`,
@@ -2289,6 +2290,11 @@ const SCAN_CONFIRM_PROMPTS = {
   age_proof:       `This is an age/DOB proof document. Return ONLY JSON: {"name":"name","dob":"date of birth","documentType":"type of document","docType":"age_proof"}`,
   medical_cert:    `This is a medical certificate. Return ONLY JSON: {"patientName":"patient name","doctorName":"doctor name","condition":"diagnosis or condition mentioned","date":"issue date","docType":"medical_cert"}`,
   father_caste:    `This is a caste certificate. Return ONLY JSON: {"name":"certificate holder name","caste":"caste category","issuedBy":"issuing authority","issueDate":"date","docType":"caste_cert"}`,
+  bank:            `This is a bank passbook or cheque. Return ONLY JSON: {"accountHolderName":"name","accountNumber":"account number","bankName":"bank name","ifsc":"IFSC if visible","branchName":"branch","docType":"bank"}`,
+  caste:           `This is a caste certificate. Return ONLY JSON: {"name":"certificate holder name","fatherName":"father name","caste":"SC/ST/OBC-A/OBC-B","issuedBy":"issuing authority","issueDate":"date","docType":"caste_cert"}`,
+  income:          `This is an income certificate. Return ONLY JSON: {"name":"applicant name","annualIncome":"annual income amount","issueDate":"date","certificateNumber":"cert number","docType":"income_cert"}`,
+  pan:             `This is a PAN card. Return ONLY JSON: {"name":"name as printed","panNumber":"10-character PAN","dob":"DD/MM/YYYY","fatherName":"father name if shown","docType":"pan"}`,
+  voter:           `This is an Indian Voter ID (EPIC). Return ONLY JSON: {"name":"name","voterId":"EPIC number","dob":"DOB if shown","gender":"Male/Female","docType":"voter_id"}`,
   default:         `This is a document. Identify what it is and extract key visible text. Return ONLY JSON: {"docType":"type of document","mainName":"primary name visible","keyDetail":"most important detail","isReadable":true}`,
 };
 
@@ -2323,14 +2329,21 @@ function DocUploadTile({ docType, label, icon, description, onScanned, scannedDa
         slotLabel={label}
         onCancel={() => setStatus("idle")}
         onCapture={async (result) => {
-          setStatus("scanning");
-          // Convert preview data URL to file and run through existing AI prompt
-          try {
-            const res = await fetch(result.preview);
-            const blob = await res.blob();
-            const file = new File([blob], `${docType}_scan.jpg`, { type: "image/jpeg" });
-            await processFile(file);
-          } catch { setErr("Could not process scanned image."); setStatus("error"); }
+          // Check if extracted data has doc-specific fields (not generic mainName/keyDetail)
+          const hasSpecificFields = result.extracted && !result.extracted.mainName && !result.extracted.isReadable && Object.keys(result.extracted).length > 1;
+          if (hasSpecificFields) {
+            onScanned(docType, result.extracted, result.name || `${docType}_scan.jpg`);
+            setStatus("done");
+          } else {
+            // Re-run AI on the cropped image with the correct DOC_PROMPTS for this docType
+            setStatus("scanning");
+            try {
+              const res = await fetch(result.preview);
+              const blob = await res.blob();
+              const file = new File([blob], `${docType}_scan.jpg`, { type: "image/jpeg" });
+              await processFile(file);
+            } catch { setErr("Could not process scanned image."); setStatus("error"); }
+          }
         }}
       />
     </div>
@@ -3335,115 +3348,169 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
     srcCtx.drawImage(video, 0, 0, vw, vh);
     stopCam();
 
-    // Step 2: Detect document edges using contrast analysis
-    // Get the guide rectangle area (82% x 72% centered)
-    const guideX = Math.floor(vw * 0.09);
-    const guideY = Math.floor(vh * 0.14);
-    const guideW = Math.floor(vw * 0.82);
-    const guideH = Math.floor(vh * 0.72);
+    // Step 2: Crop to guide area first (removes most background)
+    const guideX = Math.floor(vw * 0.08);
+    const guideY = Math.floor(vh * 0.13);
+    const guideW = Math.floor(vw * 0.84);
+    const guideH = Math.floor(vh * 0.74);
 
-    // Analyze the image inside the guide area to find document boundaries
-    const imgData = srcCtx.getImageData(guideX, guideY, guideW, guideH);
-    const pixels = imgData.data;
+    // Step 3: Within guide area, detect document edges more aggressively
+    const guideCanvas = document.createElement("canvas");
+    guideCanvas.width = guideW;
+    guideCanvas.height = guideH;
+    const gCtx = guideCanvas.getContext("2d");
+    gCtx.drawImage(srcCanvas, guideX, guideY, guideW, guideH, 0, 0, guideW, guideH);
+    const pixels = gCtx.getImageData(0, 0, guideW, guideH).data;
 
-    // Simple edge detection: scan from each side to find where document starts
-    // Look for significant brightness change (document vs background)
-    const brightness = (r, g, b) => (r * 0.299 + g * 0.587 + b * 0.114);
-    const sample = (x, y) => {
-      const idx = (y * guideW + x) * 4;
-      return brightness(pixels[idx], pixels[idx + 1], pixels[idx + 2]);
+    const br = (x, y) => {
+      if (x < 0 || x >= guideW || y < 0 || y >= guideH) return 0;
+      const i = (y * guideW + x) * 4;
+      return pixels[i] * 0.3 + pixels[i+1] * 0.59 + pixels[i+2] * 0.11;
     };
 
-    // Scan inward from each edge to find document border
-    let cropLeft = 0, cropRight = guideW, cropTop = 0, cropBottom = guideH;
+    // Sample 4 borders to get background brightness
+    let bgSum = 0, bgN = 0;
+    for (let x = 0; x < guideW; x += 3) { bgSum += br(x, 1) + br(x, guideH-2); bgN += 2; }
+    for (let y = 0; y < guideH; y += 3) { bgSum += br(1, y) + br(guideW-2, y); bgN += 2; }
+    const bgBr = bgSum / bgN;
 
-    // Calculate average brightness of border pixels (likely background/hands)
-    let borderSum = 0, borderCount = 0;
-    for (let x = 0; x < guideW; x += 4) {
-      borderSum += sample(x, 2); borderSum += sample(x, guideH - 3);
-      borderCount += 2;
-    }
-    for (let y = 0; y < guideH; y += 4) {
-      borderSum += sample(2, y); borderSum += sample(guideW - 3, y);
-      borderCount += 2;
-    }
-    const bgBright = borderSum / borderCount;
+    // Detect edges: look for sustained brightness difference (lower threshold = more aggressive)
+    let cL = 0, cR = guideW, cT = 0, cB = guideH;
+    const thresh = 15; // Lower threshold for better detection
 
-    // Scan from left
-    for (let x = 0; x < guideW * 0.3; x++) {
-      let colBright = 0;
-      for (let y = Math.floor(guideH * 0.2); y < guideH * 0.8; y += 3) colBright += sample(x, y);
-      colBright /= Math.floor((guideH * 0.6) / 3);
-      if (Math.abs(colBright - bgBright) > 25) { cropLeft = Math.max(0, x - 5); break; }
+    for (let x = 0; x < guideW * 0.35; x++) {
+      let diff = 0, cnt = 0;
+      for (let y = Math.floor(guideH*0.15); y < guideH*0.85; y += 2) { diff += Math.abs(br(x,y) - bgBr); cnt++; }
+      if (diff/cnt > thresh) { cL = Math.max(0, x - 3); break; }
     }
-    // Scan from right
-    for (let x = guideW - 1; x > guideW * 0.7; x--) {
-      let colBright = 0;
-      for (let y = Math.floor(guideH * 0.2); y < guideH * 0.8; y += 3) colBright += sample(x, y);
-      colBright /= Math.floor((guideH * 0.6) / 3);
-      if (Math.abs(colBright - bgBright) > 25) { cropRight = Math.min(guideW, x + 5); break; }
+    for (let x = guideW-1; x > guideW*0.65; x--) {
+      let diff = 0, cnt = 0;
+      for (let y = Math.floor(guideH*0.15); y < guideH*0.85; y += 2) { diff += Math.abs(br(x,y) - bgBr); cnt++; }
+      if (diff/cnt > thresh) { cR = Math.min(guideW, x + 3); break; }
     }
-    // Scan from top
-    for (let y = 0; y < guideH * 0.3; y++) {
-      let rowBright = 0;
-      for (let x = Math.floor(guideW * 0.2); x < guideW * 0.8; x += 3) rowBright += sample(x, y);
-      rowBright /= Math.floor((guideW * 0.6) / 3);
-      if (Math.abs(rowBright - bgBright) > 25) { cropTop = Math.max(0, y - 5); break; }
+    for (let y = 0; y < guideH*0.35; y++) {
+      let diff = 0, cnt = 0;
+      for (let x = Math.floor(guideW*0.15); x < guideW*0.85; x += 2) { diff += Math.abs(br(x,y) - bgBr); cnt++; }
+      if (diff/cnt > thresh) { cT = Math.max(0, y - 3); break; }
     }
-    // Scan from bottom
-    for (let y = guideH - 1; y > guideH * 0.7; y--) {
-      let rowBright = 0;
-      for (let x = Math.floor(guideW * 0.2); x < guideW * 0.8; x += 3) rowBright += sample(x, y);
-      rowBright /= Math.floor((guideW * 0.6) / 3);
-      if (Math.abs(rowBright - bgBright) > 25) { cropBottom = Math.min(guideH, y + 5); break; }
+    for (let y = guideH-1; y > guideH*0.65; y--) {
+      let diff = 0, cnt = 0;
+      for (let x = Math.floor(guideW*0.15); x < guideW*0.85; x += 2) { diff += Math.abs(br(x,y) - bgBr); cnt++; }
+      if (diff/cnt > thresh) { cB = Math.min(guideH, y + 3); break; }
     }
 
-    // Step 3: Crop to detected document area
-    const docW = cropRight - cropLeft;
-    const docH = cropBottom - cropTop;
+    const dW = cR - cL, dH = cB - cT;
+    const validCrop = dW > guideW * 0.35 && dH > guideH * 0.35;
+    const fL = validCrop ? cL : Math.floor(guideW * 0.03);
+    const fT = validCrop ? cT : Math.floor(guideH * 0.03);
+    const fW = validCrop ? dW : Math.floor(guideW * 0.94);
+    const fH = validCrop ? dH : Math.floor(guideH * 0.94);
 
-    // Only use detected crop if it's a reasonable document shape (not too small or weird)
-    const useDetectedCrop = docW > guideW * 0.4 && docH > guideH * 0.4 && docW < guideW && docH < guideH;
-
-    const finalX = guideX + (useDetectedCrop ? cropLeft : 0);
-    const finalY = guideY + (useDetectedCrop ? cropTop : 0);
-    const finalW = useDetectedCrop ? docW : guideW;
-    const finalH = useDetectedCrop ? docH : guideH;
-
-    // Step 4: Create clean cropped document canvas
+    // Step 4: Create output canvas with just the document
+    const outW = Math.min(fW, 1600);
+    const outH = Math.min(fH, 1200);
     const outCanvas = document.createElement("canvas");
-    outCanvas.width = Math.min(finalW, 2000);  // Cap at 2000px
-    outCanvas.height = Math.min(finalH, 2000);
+    outCanvas.width = outW; outCanvas.height = outH;
     const outCtx = outCanvas.getContext("2d");
-    outCtx.drawImage(srcCanvas, finalX, finalY, finalW, finalH, 0, 0, outCanvas.width, outCanvas.height);
 
-    // Step 5: Enhance image — increase contrast, sharpen for better OCR
-    const enhData = outCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+    // White background first
+    outCtx.fillStyle = "#ffffff";
+    outCtx.fillRect(0, 0, outW, outH);
+
+    // Draw cropped document
+    outCtx.drawImage(guideCanvas, fL, fT, fW, fH, 0, 0, outW, outH);
+
+    // Step 5: Clean up remaining background/fingers using flood fill from edges
+    const outData = outCtx.getImageData(0, 0, outW, outH);
+    const od = outData.data;
+
+    // Sample border of output image for remaining background color
+    let obSum = 0, obN = 0;
+    const obr = (x,y) => { const i=(y*outW+x)*4; return od[i]*0.3+od[i+1]*0.59+od[i+2]*0.11; };
+    for (let x = 0; x < outW; x += 3) { obSum += obr(x,0) + obr(x,outH-1); obN += 2; }
+    for (let y = 0; y < outH; y += 3) { obSum += obr(0,y) + obr(outW-1,y); obN += 2; }
+    const outBg = obSum / obN;
+
+    // If border has any non-white pixels, clean up background/fingers
+    if (outBg < 240) {
+      const mask = new Uint8Array(outW * outH);
+      const bgThresh = 45; // More aggressive threshold
+      const queue = [];
+
+      // Sample border color more precisely
+      let bR=0,bG=0,bB=0,bN2=0;
+      for (let x=0;x<outW;x+=2) {
+        let i=(0*outW+x)*4; bR+=od[i];bG+=od[i+1];bB+=od[i+2];
+        i=((outH-1)*outW+x)*4; bR+=od[i];bG+=od[i+1];bB+=od[i+2]; bN2+=2;
+      }
+      for (let y=0;y<outH;y+=2) {
+        let i=(y*outW+0)*4; bR+=od[i];bG+=od[i+1];bB+=od[i+2];
+        i=(y*outW+outW-1)*4; bR+=od[i];bG+=od[i+1];bB+=od[i+2]; bN2+=2;
+      }
+      bR/=bN2;bG/=bN2;bB/=bN2;
+
+      const colorDist = (i) => {
+        const dr=od[i]-bR, dg=od[i+1]-bG, db=od[i+2]-bB;
+        return Math.sqrt(dr*dr+dg*dg+db*db);
+      };
+
+      // Also detect skin-colored pixels (hands/fingers) near borders
+      const isSkin = (i) => {
+        const r=od[i],g=od[i+1],b=od[i+2];
+        return r>80 && g>40 && r>g && (r-g)>10 && r<250 && b<r*0.85;
+      };
+
+      // Seed from borders
+      for (let x=0;x<outW;x++) { mask[x]=1;mask[(outH-1)*outW+x]=1;queue.push(x);queue.push((outH-1)*outW+x); }
+      for (let y=0;y<outH;y++) { mask[y*outW]=1;mask[y*outW+outW-1]=1;queue.push(y*outW);queue.push(y*outW+outW-1); }
+
+      let qi = 0;
+      while (qi < queue.length) {
+        const pos = queue[qi++];
+        const px = pos%outW, py = Math.floor(pos/outW);
+        for (const [nx,ny] of [[px-1,py],[px+1,py],[px,py-1],[px,py+1]]) {
+          if (nx<0||nx>=outW||ny<0||ny>=outH) continue;
+          const np = ny*outW+nx;
+          if (mask[np]) continue;
+          const ni = np*4;
+          // Mark as background if similar to border OR skin-colored near edges
+          if (colorDist(ni) < bgThresh || (isSkin(ni) && (nx < outW*0.12 || nx > outW*0.88 || ny < outH*0.1 || ny > outH*0.9))) {
+            mask[np]=1; queue.push(np);
+          }
+        }
+      }
+
+      // Replace background with white, feather edges
+      for (let i = 0; i < mask.length; i++) {
+        if (mask[i]) {
+          const pi = i*4;
+          od[pi]=255; od[pi+1]=255; od[pi+2]=255;
+        }
+      }
+      outCtx.putImageData(outData, 0, 0);
+    }
+
+    // Step 6: Enhance contrast
+    const enhData = outCtx.getImageData(0, 0, outW, outH);
     const ep = enhData.data;
-
-    // Auto-levels: find min/max brightness and stretch
     let minB = 255, maxB = 0;
-    for (let i = 0; i < ep.length; i += 16) { // Sample every 4th pixel
-      const b = brightness(ep[i], ep[i+1], ep[i+2]);
-      if (b < minB) minB = b;
-      if (b > maxB) maxB = b;
+    for (let i = 0; i < ep.length; i += 16) {
+      const b = ep[i]*0.3+ep[i+1]*0.59+ep[i+2]*0.11;
+      if (b < minB && b > 10) minB = b;
+      if (b > maxB && b < 250) maxB = b;
     }
     const range = maxB - minB || 1;
-    const contrast = 1.2; // Slight contrast boost
-
     for (let i = 0; i < ep.length; i += 4) {
       for (let c = 0; c < 3; c++) {
-        let v = ep[i + c];
-        // Normalize to 0-255 range
+        let v = ep[i+c];
         v = ((v - minB) / range) * 255;
-        // Apply contrast
-        v = ((v / 255 - 0.5) * contrast + 0.5) * 255;
-        ep[i + c] = Math.max(0, Math.min(255, Math.round(v)));
+        v = ((v/255 - 0.5) * 1.15 + 0.5) * 255;
+        ep[i+c] = Math.max(0, Math.min(255, Math.round(v)));
       }
     }
     outCtx.putImageData(enhData, 0, 0);
 
-    // Step 6: Convert to blob and proceed
+    // Step 7: Send to AI
     outCanvas.toBlob(async blob => {
       const src = URL.createObjectURL(blob);
       setCapturedSrc(src);
@@ -3451,7 +3518,7 @@ function DocScanCamera({ slotKey, slotLabel, onCapture, onCancel }) {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         const b64 = ev.target.result.split(",")[1];
-        const prompt = SCAN_CONFIRM_PROMPTS[slotKey] || SCAN_CONFIRM_PROMPTS.default;
+        const prompt = DOC_PROMPTS[slotKey] || SCAN_CONFIRM_PROMPTS[slotKey] || SCAN_CONFIRM_PROMPTS.default;
         const result = await callClaudeVision(b64, "image/jpeg", prompt);
         if (!result) {
           setExtractErr("AI could not read document clearly. Try again with better light and flat surface.");
