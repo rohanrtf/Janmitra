@@ -828,7 +828,7 @@ function generateDocIssues(worker, members, questionnaire) {
   // ── MEMBER ISSUES ──────────────────────────────────────────────────────────
   (members || []).forEach(m => {
     // Woman: no own bank account
-    if (m.gender === "female" && (!m.bankAccount || !m.bankInOwnName)) {
+    if (m.gender === "female" && !m.bankInOwnName && !m.bankAccount) {
       add({
         person: m.name, personType: m.relation,
         severity: "critical", category: "bank_missing", code: "WOMAN_NO_OWN_ACCOUNT",
@@ -874,7 +874,7 @@ function generateDocIssues(worker, members, questionnaire) {
     }
 
     // Girl: needs own account for Kanyashree
-    if (m.gender === "female" && m.student && m.age >= 13 && m.age <= 18 && m.maritalStatus === "unmarried" && (!m.bankAccount || !m.bankInOwnName)) {
+    if (m.gender === "female" && m.student && m.age >= 13 && m.age <= 18 && m.maritalStatus === "unmarried" && !m.bankInOwnName && !m.bankAccount) {
       add({
         person: m.name, personType: m.relation,
         severity: "high", category: "bank_missing", code: "KANYASHREE_NEEDS_ACCOUNT",
@@ -895,6 +895,25 @@ function generateDocIssues(worker, members, questionnaire) {
           },
         ],
         blockedSchemes: ["Kanyashree K1 (₹1,000/year)","Kanyashree K2 (₹25,000 at age 18)","NSP Scholarship"],
+      });
+    }
+
+    // Member has bank account but passbook details not captured
+    if ((m.bankAccount || m.bankInOwnName) && !m.bankAccountNo && !m.bankAccountName) {
+      add({
+        person: m.name, personType: m.relation,
+        severity: "high", category: "document_missing", code: "MEMBER_BANK_PASSBOOK_MISSING",
+        title: `${m.name}: Bank passbook not uploaded`,
+        detail: `${m.name} has a bank account but passbook has not been scanned. Upload from Household step or Docs tab. Required for DBT schemes.`,
+        paths: [
+          {
+            id: "upload_passbook", label: "Upload bank passbook", icon: "🏦", recommended: true, days: "Immediate",
+            steps: ["Go back to Household step and scan bank passbook for " + m.name, "Or: open the Docs tab and upload there", "First page showing account number, name, IFSC, branch"],
+            documents: ["Bank passbook (first page) — or cancelled cheque or bank statement"],
+            generates: [],
+          },
+        ],
+        blockedSchemes: m.gender === "female" ? ["Lakshmir Bhandar", "Rupashree", "Kanyashree K2", "PMMVY"] : ["APY", "PM-SYM"],
       });
     }
   });
@@ -5676,7 +5695,13 @@ function QuestionnaireScreen({ household, existingAnswers, onComplete, onBack })
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
             {[["student", "Student"], ["bankAccount", "Has Bank Account"], ["bankInOwnName", "Account in own name"], ["pregnant", "Pregnant"], ["firstChild", "First child (PMMVY)"]].map(([k, l]) => (
               <label key={k} style={{ fontSize: 12, color: COLORS.slate, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
-                <input type="checkbox" checked={!!md[k]} onChange={e => updateMember(i, k, e.target.checked)} /> {l}
+                <input type="checkbox" checked={!!md[k]} onChange={e => {
+                  updateMember(i, k, e.target.checked);
+                  // If "Account in own name" is checked, also set "Has Bank Account"
+                  if (k === "bankInOwnName" && e.target.checked) updateMember(i, "bankAccount", true);
+                  // If "Has Bank Account" is unchecked, also uncheck "Account in own name"
+                  if (k === "bankAccount" && !e.target.checked) updateMember(i, "bankInOwnName", false);
+                }} /> {l}
               </label>
             ))}
           </div>
