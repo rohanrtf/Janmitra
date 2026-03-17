@@ -6678,15 +6678,37 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── OTP Login Screen ──
+  // ── Agent OTP state (must be outside conditional) ──
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpError, setOtpError] = useState("");
+
   if (!agentLoggedIn) {
-    const handleSendOTP = () => {
-      if (agentName.trim() && agentPhone.replace(/\D/g,"").length >= 10) {
-        setOtpSent(true);
+    const handleSendOTP = async () => {
+      if (!agentName.trim() || agentPhone.replace(/\D/g,"").length < 10) return;
+      setOtpSending(true); setOtpError("");
+      try {
+        const r = await fetch("/api/otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "send", mobile: agentPhone.replace(/\D/g,"") }) });
+        const d = await r.json();
+        if (d.success) {
+          window._jansetuAgentOtp = d.otp; // Store for verification
+          setOtpSent(true);
+        } else {
+          setOtpError("Failed to send OTP: " + (d.error || "Unknown error"));
+        }
+      } catch (e) {
+        setOtpError("Network error: " + e.message);
       }
+      setOtpSending(false);
     };
+
     const handleVerifyOTP = () => {
-      if (otpValue.replace(/\D/g,"").length >= 4) {
+      const enteredOtp = otpValue.replace(/\D/g,"");
+      if (enteredOtp.length < 4) return;
+      // Verify against stored OTP
+      if (window._jansetuAgentOtp && enteredOtp === String(window._jansetuAgentOtp)) {
         setAgentLoggedIn(true);
+      } else {
+        setOtpError("Invalid OTP. Please try again.");
       }
     };
     return (
@@ -6699,12 +6721,13 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
             <>
               <Input label="Agent Name" value={agentName} onChange={setAgentName} placeholder="Full name" />
               <Input label="Mobile Number" value={agentPhone} onChange={setAgentPhone} placeholder="10-digit mobile" />
+              {otpError && <div style={{ background: "#FADBD8", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: COLORS.red }}>{otpError}</div>}
               <div style={{ marginTop: 16 }}>
-                <button onClick={handleSendOTP}
-                  style={{ width: "100%", padding: "12px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, fontFamily: "inherit",
-                    background: (agentName.trim() && agentPhone.length >= 10) ? COLORS.saffron : "#D0D8E4",
-                    color: (agentName.trim() && agentPhone.length >= 10) ? "#fff" : "#999" }}>
-                  📲 Send OTP
+                <button onClick={handleSendOTP} disabled={otpSending}
+                  style={{ width: "100%", padding: "12px 20px", borderRadius: 10, border: "none", cursor: otpSending ? "wait" : "pointer", fontWeight: 800, fontSize: 15, fontFamily: "inherit",
+                    background: (agentName.trim() && agentPhone.length >= 10 && !otpSending) ? COLORS.saffron : "#D0D8E4",
+                    color: (agentName.trim() && agentPhone.length >= 10 && !otpSending) ? "#fff" : "#999" }}>
+                  {otpSending ? "⏳ Sending OTP..." : "📲 Send OTP"}
                 </button>
               </div>
             </>
@@ -6713,7 +6736,8 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
               <div style={{ background: COLORS.greenPale, borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 13, color: COLORS.green }}>
                 ✅ OTP sent to {agentPhone}
               </div>
-              <Input label="Enter OTP" value={otpValue} onChange={setOtpValue} placeholder="Enter any 4+ digit OTP" />
+              <Input label="Enter OTP" value={otpValue} onChange={setOtpValue} placeholder="Enter 4-6 digit OTP received on mobile" />
+              {otpError && <div style={{ background: "#FADBD8", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: COLORS.red }}>{otpError}</div>}
               <div style={{ marginTop: 16 }}>
                 <button onClick={handleVerifyOTP}
                   style={{ width: "100%", padding: "12px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, fontFamily: "inherit",
