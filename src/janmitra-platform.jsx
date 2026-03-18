@@ -7002,7 +7002,7 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
           </div>
         )}
 
-        {/* Documents with upload status */}
+        {/* Documents with view/upload/approve/reject */}
         <Card style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, color: COLORS.navy, marginBottom: 12 }}>📋 Documents — Verify / Upload</div>
           {app.scheme.docs.map(d => {
@@ -7010,23 +7010,92 @@ function AgentConsole({ applications, onUpdateStatus, onResumeWorker }) {
             const st = docStatus[key];
             const isUploaded = app.docs?.[d] === "uploaded";
             const hasFromVault = app.uploadedDocs?.[d];
+            const hasDoc = isUploaded || hasFromVault;
+            const docData = hasFromVault || null;
+
+            // Agent upload handler
+            const handleAgentUpload = () => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "image/*,.pdf";
+              input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    // Store in app's uploadedDocs
+                    if (!app.uploadedDocs) app.uploadedDocs = {};
+                    app.uploadedDocs[d] = { source: "agent_upload", name: file.name, preview: ev.target.result, type: file.type, size: file.size };
+                    if (!app.docs) app.docs = {};
+                    app.docs[d] = "uploaded";
+                    toggleDoc(app.ref, d, true);
+                  };
+                  reader.readAsDataURL(file);
+                }
+              };
+              input.click();
+            };
+
+            // View document handler
+            const handleView = () => {
+              if (docData?.preview) {
+                const w = window.open("", "_blank");
+                if (w) {
+                  w.document.write(`<html><head><title>${app.person.name} - ${d}</title><style>body{margin:0;display:flex;justify-content:center;align-items:flex-start;background:#f5f5f5;min-height:100vh;padding:20px}img{max-width:100%;height:auto;box-shadow:0 4px 20px rgba(0,0,0,0.15);border-radius:8px}</style></head><body><img src="${docData.preview}"></body></html>`);
+                  w.document.close();
+                }
+              } else {
+                alert("Document preview not available. The worker may need to re-upload this document.");
+              }
+            };
+
             return (
-              <div key={d} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F0F4F8" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: COLORS.slate }}>
-                    {d}
-                    {(isUploaded || hasFromVault) && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 6, background: "#E8F5EE", color: COLORS.green }}>📎 Worker uploaded</span>}
+              <div key={d} style={{ padding: "10px 0", borderBottom: "1px solid #F0F4F8" }}>
+                {/* Doc name + status row */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: hasDoc ? 8 : 0 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.navy }}>{d}</div>
+                    {hasDoc && !st && <div style={{ fontSize: 10, color: COLORS.saffron, fontWeight: 700 }}>📎 Uploaded by worker — review & approve</div>}
+                    {st === true && <div style={{ fontSize: 10, color: COLORS.green, fontWeight: 700 }}>✅ Verified & Approved</div>}
+                    {st === false && <div style={{ fontSize: 10, color: COLORS.red, fontWeight: 700 }}>❌ Rejected — needs re-upload</div>}
+                    {!hasDoc && st === undefined && <div style={{ fontSize: 10, color: "#A0AABB" }}>⏳ Not uploaded yet</div>}
                   </div>
-                  {st !== undefined && <div style={{ fontSize: 10, color: st ? COLORS.green : COLORS.red, fontWeight: 700 }}>{st ? "✅ Verified" : "❌ Rejected — re-upload needed"}</div>}
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {st !== true && (
-                    <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#EAF0FA", color: COLORS.navyMid, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
-                      📤 Upload & Approve
+
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {/* View button - only if document exists */}
+                  {hasDoc && (
+                    <button onClick={handleView} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${COLORS.navy}30`, background: "#EAF0FA", color: COLORS.navy, fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                      👁 View Document
                     </button>
                   )}
-                  <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding: "3px 9px", borderRadius: 5, border: "none", background: st === true ? COLORS.green : "#E8F5EE", color: st === true ? "#fff" : COLORS.green, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>✅</button>
-                  <button onClick={() => toggleDoc(app.ref, d, false)} style={{ padding: "3px 9px", borderRadius: 5, border: "none", background: st === false ? COLORS.red : "#FADBD8", color: st === false ? "#fff" : COLORS.red, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>❌</button>
+
+                  {/* Upload button - always available for agent to upload/re-upload */}
+                  <button onClick={handleAgentUpload} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${COLORS.saffron}30`, background: "#FEF3E2", color: COLORS.saffron, fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                    📤 {hasDoc ? "Re-upload" : "Upload"}
+                  </button>
+
+                  {/* Approve - only if doc exists and not yet approved */}
+                  {hasDoc && st !== true && (
+                    <button onClick={() => toggleDoc(app.ref, d, true)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: COLORS.green, color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                      ✅ Approve
+                    </button>
+                  )}
+
+                  {/* Reject - only if doc exists */}
+                  {hasDoc && st !== false && (
+                    <button onClick={() => toggleDoc(app.ref, d, false)} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: COLORS.red, color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                      ❌ Reject
+                    </button>
+                  )}
+
+                  {/* If rejected, show re-upload prominently */}
+                  {st === false && (
+                    <button onClick={handleAgentUpload} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: COLORS.saffron, color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "inherit" }}>
+                      📷 Scan & Re-upload Now
+                    </button>
+                  )}
                 </div>
               </div>
             );
